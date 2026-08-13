@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Branching
+
+**Never commit code changes to `main` directly.** Every change starts with a new branch off
+`main` — `git checkout -b <type>/<short-name>`, matching the commit types below
+(`feat/…`, `fix/…`, `test/…`, `docs/…`, `chore/…`). This applies to any change to the
+repository, not only large ones.
+
+If work has already begun in the working tree on `main`, `git checkout -b` carries the
+uncommitted changes onto the new branch — move them there before committing rather than
+committing to `main` and fixing it afterwards.
+
+Merge back with `--ff-only` where history is linear, which keeps every commit on `main`
+conventional and avoids a non-conventional merge commit.
+
 ## Commands
 
 ```sh
