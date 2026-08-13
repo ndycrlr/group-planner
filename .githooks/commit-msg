@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+#
+# Reject commit messages that are not Conventional Commits 1.0.0.
+# https://www.conventionalcommits.org/en/v1.0.0/
+#
+# Activated by core.hooksPath, which `npm run hooks:install` sets. Git hooks
+# live outside .git so they can be committed and shared.
+
+set -uo pipefail
+
+message_file="$1"
+
+# Rule 1: type, optional (scope), optional !, then a colon, a space, and a
+# description. Merge, revert, fixup and squash subjects are git's own wording
+# and are left alone.
+SUBJECT_PATTERN='^[a-zA-Z]+(\([^()]+\))?!?: .+'
+GIT_GENERATED='^(Merge |Revert |fixup! |squash! )'
+
+# Rule 4 of the spec allows any type; these are the mandated two plus the
+# conventional rest, and warning on anything else catches typos like "chores".
+KNOWN_TYPES='feat fix build chore ci docs style refactor perf test'
+
+# Strip comments and trailing blank lines, then take the subject.
+subject="$(grep -v '^#' "$message_file" | sed '/./,$!d' | head -n 1)"
+
+if [ -z "$subject" ]; then
+  echo "commit-msg: the commit message is empty." >&2
+  exit 1
+fi
+
+if printf '%s' "$subject" | grep -qE "$GIT_GENERATED"; then
+  exit 0
+fi
+
+fail() {
+  cat >&2 <<EOF
+commit-msg: this message is not a Conventional Commit.
+
+  subject: $subject
+
+  $1
+
+Expected:  <type>[(scope)][!]: <description>
+Types:     $KNOWN_TYPES
+Breaking:  a ! before the colon, or a "BREAKING CHANGE: ..." footer.
+
+Examples:
+  feat(results): highlight the slot everyone can make
+  fix(dates): stop a UK summer date shifting a day backwards
+  test: cover the drag-to-paint selection path
+  refactor(db)!: replace the response upsert with a merge
+
+Spec: https://www.conventionalcommits.org/en/v1.0.0/
+EOF
+  exit 1
+}
+
+printf '%s' "$subject" | grep -qE "$SUBJECT_PATTERN" ||
+  fail 'It needs a type, then ": ", then a description.'
+
+type="$(printf '%s' "$subject" | sed -E 's/^([a-zA-Z]+).*/\1/')"
+case " $KNOWN_TYPES " in
+  *" $type "*) ;;
+  *) fail "\"$type\" is not one of the conventional types." ;;
+esac
+
+# Rule 5: the description has to actually say something.
+description="$(printf '%s' "$subject" | sed -E 's/^[a-zA-Z]+(\([^()]+\))?!?: //')"
+[ "${#description}" -ge 10 ] ||
+  fail 'The description is too short to be useful.'
+
+# Rules 6 and 8: a blank line has to separate the subject from anything after it.
+second_line="$(grep -v '^#' "$message_file" | sed '/./,$!d' | sed -n '2p')"
+[ -z "$second_line" ] ||
+  fail 'Leave a blank line between the subject and the body.'
+
+# Rule 12: the footer spelling is uppercase, and easy to get wrong.
+if grep -qiE '^breaking[ -]change:' "$message_file" &&
+   ! grep -qE '^BREAKING[ -]CHANGE:' "$message_file"; then
+  fail 'A breaking-change footer must be uppercase: "BREAKING CHANGE:".'
+fi
+
+exit 0

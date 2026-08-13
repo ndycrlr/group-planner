@@ -34,6 +34,16 @@ npm test
 their own server on port 3210 with a throwaway database, so your real `planner.db`
 is never touched.
 
+## Contributing
+
+Commits follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/),
+enforced by a `commit-msg` hook that `npm install` activates:
+
+```
+feat(results): highlight the slot everyone can make
+fix(dates): stop a UK summer date shifting a day backwards
+```
+
 ## How it's used
 
 1. **Create** — on the home page, name the activity and choose the first and last day

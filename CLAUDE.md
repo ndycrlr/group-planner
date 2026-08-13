@@ -67,6 +67,17 @@ Event ids are 6 random bytes as base64url. There are no accounts: anyone with th
 
 `event.html` keeps selections in a `Set` of `'YYYY-MM-DD|part'` keys; the buttons are a rendering of that Set and the `buttons` Map is rebuilt per render, which is what makes switching views cheap. Drafts persist to `localStorage` under `planner:selection:<id>`, the name under `planner:name`, the view choice under `planner:view`. Every `localStorage` access is wrapped in try/catch — private browsing refuses it and the feature is a nicety, not a requirement.
 
+## Commits
+
+Every commit follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
+`<type>[(scope)][!]: <description>`, a blank line, then the body. Types are `feat` and
+`fix` plus `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`, `test`. Breaking
+changes take a `!` before the colon or a `BREAKING CHANGE:` footer (uppercase).
+
+`.githooks/commit-msg` enforces it and `core.hooksPath` activates it — `npm install` sets
+that via the `prepare` script, or run `npm run hooks:install` directly. A rejected commit
+means the subject needs rewriting; do not reach for `--no-verify`.
+
 ## Conventions
 
 - ESM throughout (`"type": "module"`), 2-space indent, single quotes, semicolons.
