@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Group Planner — your availability</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<main class="page">
+  <header class="page-head">
+    <p class="eyebrow">Your availability</p>
+    <h1 id="title">Loading…</h1>
+    <p class="subtitle" id="range"></p>
+  </header>
+
+  <div id="error" class="notice error" hidden></div>
+
+  <section class="card" id="form" hidden>
+    <label class="field">
+      <span>Your name</span>
+      <input id="name" type="text" maxlength="50" autocomplete="name" placeholder="e.g. Andy">
+    </label>
+
+    <div class="grid-head">
+      <p class="hint">
+        Tap every slot you could make — click and drag to select a run of them.
+        Submitting again with the same name replaces your earlier answer.
+      </p>
+      <div class="view-toggle" id="viewToggle" role="group" aria-label="Calendar view"></div>
+    </div>
+
+    <div id="grid"></div>
+
+    <div class="actions">
+      <button id="submit" class="primary" type="button">Submit availability</button>
+      <button id="clear" type="button">Clear all</button>
+      <span class="spacer"></span>
+      <a id="resultsLink" class="link" href="#">See results →</a>
+    </div>
+    <p id="status" class="status" role="status"></p>
+  </section>
+</main>
+
+<script type="module">
+import { PARTS, PART_LABELS, datesInRange, formatDay } from './dates.js';
+import {
+  api, qs, el, showNotice,
+  renderCalendar, preferredView, createViewToggle,
+} from './common.js';
+
+const eventId = qs('id');
+const errorBox = document.getElementById('error');
+const form = document.getElementById('form');
+const nameInput = document.getElementById('name');
+const status = document.getElementById('status');
+const submitButton = document.getElementById('submit');
+
+const selected = new Set();          // 'YYYY-MM-DD|part'
+const buttons = new Map();           // same key -> its toggle button, current view only
+const selectionKey = `planner:selection:${eventId}`;
+const NAME_KEY = 'planner:name';
+const PART_INITIALS = { morning: 'M', afternoon: 'A', evening: 'E' };
+
+let currentEvent = null;
+let view = 'list';
+
+function setStatus(message, isError = false) {
+  status.textContent = message;
+  status.classList.toggle('error', isError);
+}
+
+/** Remember ticks locally so a reload before submitting doesn't lose them. */
+function saveDraft() {
+  try {
+    localStorage.setItem(selectionKey, JSON.stringify([...selected]));
+  } catch {
+    // Private browsing can refuse storage; the draft is a nicety, not required.
+  }
+}
+
+function loadDraft() {
+  try {
+    return JSON.parse(localStorage.getItem(selectionKey) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Push `selected` onto the button for one slot. Safe to call for a slot that
+ * isn't currently on screen, which is what makes switching views cheap: the
+ * Set is the truth, the buttons are just a rendering of it.
+ */
+function paintSlot(key) {
+  const button = buttons.get(key);
+  if (!button) return;
+
+  const on = selected.has(key);
+  const part = key.split('|')[1];
+  button.setAttribute('aria-pressed', String(on));
+  button.textContent =
+    view === 'month'
+      ? (on ? `${PART_INITIALS[part]} ✓` : PART_INITIALS[part])
+      : (on ? '✓ Available' : PART_LABELS[part]);
+}
+
+function setSlot(key, on) {
+  if (on) selected.add(key);
+  else selected.delete(key);
+  paintSlot(key);
+  saveDraft();
+}
+
+// Click to toggle one slot; hold and drag to paint a run of them. The first
+// cell decides whether the drag is selecting or clearing.
+let painting = null;
+
+document.addEventListener('pointerup', () => { painting = null; });
+document.addEventListener('pointercancel', () => { painting = null; });
+
+function makeCell(cell, date, part, { compact }) {
+  const key = `${date}|${part}`;
+  const button = el('button', {
+    type: 'button',
+    className: compact ? 'pick strip' : 'pick',
+  });
+  button.setAttribute('aria-label', `${formatDay(date)} ${PART_LABELS[part]}`);
+
+  button.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    painting = !selected.has(key);
+    setSlot(key, painting);
+  });
+  button.addEventListener('pointerenter', () => {
+    if (painting !== null) setSlot(key, painting);
+  });
+  // Keyboard users get the plain click path; pointerdown already handled mice.
+  button.addEventListener('keydown', (event) => {
+    if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault();
+      setSlot(key, !selected.has(key));
+    }
+  });
+
+  buttons.set(key, button);
+  cell.append(button);
+  paintSlot(key); // restores the tick when re-rendering after a view switch
+}
+
+/** Rebuild the grid in the current view. The button map belongs to one render. */
+function renderNow() {
+  buttons.clear();
+  renderCalendar(document.getElementById('grid'), view, currentEvent, makeCell);
+}
+
+/** Replace the "Loading…" heading with an explanation and stop. */
+function failPage(message) {
+  document.getElementById('title').textContent = 'Event not found';
+  showNotice(errorBox, message);
+}
+
+async function main() {
+  if (!eventId) {
+    failPage('This link is missing an event id. Ask the organiser for the full link.');
+    return;
+  }
+
+  let event;
+  try {
+    event = await api(`/api/events/${encodeURIComponent(eventId)}`);
+  } catch (error) {
+    failPage(error.message);
+    return;
+  }
+
+  document.title = `${event.title} — your availability`;
+  document.getElementById('title').textContent = event.title;
+  const dates = datesInRange(event.startDate, event.endDate);
+  document.getElementById('range').textContent =
+    `${dates.length} day${dates.length === 1 ? '' : 's'} to choose from`;
+  document.getElementById('resultsLink').href =
+    `./results.html?id=${encodeURIComponent(eventId)}`;
+
+  // Restore anything from a previous visit, ignoring slots no longer in range.
+  // This happens before the first render so the ticks are painted in either view.
+  const validKeys = new Set(dates.flatMap((date) => PARTS.map((part) => `${date}|${part}`)));
+  for (const key of loadDraft()) {
+    if (validKeys.has(key)) selected.add(key);
+  }
+
+  currentEvent = event;
+  view = preferredView(event);
+  createViewToggle(document.getElementById('viewToggle'), view, (next) => {
+    view = next;
+    renderNow();
+  });
+  renderNow();
+
+  form.hidden = false;
+  nameInput.value = localStorage.getItem(NAME_KEY) ?? '';
+  nameInput.focus();
+}
+
+document.getElementById('clear').addEventListener('click', () => {
+  for (const key of [...selected]) setSlot(key, false);
+  setStatus('');
+});
+
+submitButton.addEventListener('click', async () => {
+  const name = nameInput.value.trim();
+  if (!name) {
+    setStatus('Please add your name so people know whose availability this is.', true);
+    nameInput.focus();
+    return;
+  }
+
+  const slots = [...selected].map((key) => {
+    const [date, part] = key.split('|');
+    return { date, part };
+  });
+
+  submitButton.disabled = true;
+  setStatus('Saving…');
+
+  try {
+    await api(`/api/events/${encodeURIComponent(eventId)}/responses`, {
+      method: 'POST',
+      body: JSON.stringify({ name, slots }),
+    });
+    localStorage.setItem(NAME_KEY, name);
+    setStatus(
+      slots.length === 0
+        ? `Saved — noted that you can't make any of these, ${name}.`
+        : `Saved — thanks, ${name}! You're down for ${slots.length} slot${slots.length === 1 ? '' : 's'}.`,
+    );
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+main();
+</script>
+
+</body>
+</html>

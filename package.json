@@ -1,0 +1,17 @@
+{
+  "name": "group-planner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Collect group availability across a range of days, split into morning / afternoon / evening.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

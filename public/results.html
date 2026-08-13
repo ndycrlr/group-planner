@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Group Planner — results</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<main class="page">
+  <header class="page-head">
+    <p class="eyebrow">Results</p>
+    <h1 id="title">Loading…</h1>
+    <p class="subtitle" id="range"></p>
+  </header>
+
+  <div id="error" class="notice error" hidden></div>
+  <div id="empty" class="notice" hidden></div>
+
+  <section class="card" id="summary" hidden>
+    <strong id="peopleCount"></strong>
+    <ul class="people" id="people"></ul>
+    <p id="best" class="hint"></p>
+  </section>
+
+  <section class="card" id="resultsCard" hidden>
+    <div class="grid-head">
+      <span class="hint" id="gridHint"></span>
+      <div class="view-toggle" id="viewToggle" role="group" aria-label="Calendar view"></div>
+    </div>
+    <div id="grid"></div>
+    <div class="actions">
+      <button id="refresh" type="button">Refresh</button>
+      <span class="legend"><span class="swatch"></span> ringed and fully lit — everyone is free</span>
+      <span class="spacer"></span>
+      <a id="submitLink" class="link" href="#">Add or change your availability →</a>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { PART_LABELS, datesInRange, formatDay } from './dates.js';
+import {
+  api, qs, el, showNotice,
+  renderCalendar, preferredView, createViewToggle,
+} from './common.js';
+
+const eventId = qs('id');
+const errorBox = document.getElementById('error');
+const emptyBox = document.getElementById('empty');
+const summary = document.getElementById('summary');
+const resultsCard = document.getElementById('resultsCard');
+
+let data = null;      // the last payload, so switching views doesn't refetch
+let view = 'list';
+let toggleReady = false;
+
+/** Replace the "Loading…" heading with an explanation and stop. */
+function failPage(message) {
+  document.getElementById('title').textContent = 'Event not found';
+  showNotice(errorBox, message);
+}
+
+async function load() {
+  if (!eventId) {
+    failPage('This link is missing an event id. Ask the organiser for the full link.');
+    return;
+  }
+
+  try {
+    data = await api(`/api/events/${encodeURIComponent(eventId)}/results`);
+  } catch (error) {
+    failPage(error.message);
+    return;
+  }
+
+  const { event, participants, grid } = data;
+  const total = participants.length;
+
+  document.title = `${event.title} — results`;
+  document.getElementById('title').textContent = event.title;
+  document.getElementById('submitLink').href =
+    `./event.html?id=${encodeURIComponent(eventId)}`;
+
+  const dates = datesInRange(event.startDate, event.endDate);
+  document.getElementById('range').textContent =
+    `${formatDay(event.startDate)} – ${formatDay(event.endDate)}`;
+
+  showNotice(
+    emptyBox,
+    total === 0 ? 'Nobody has replied yet. Share the event link and check back.' : '',
+  );
+
+  document.getElementById('peopleCount').textContent =
+    `${total} ${total === 1 ? 'person has' : 'people have'} replied`;
+  document.getElementById('people').replaceChildren(
+    ...participants.map((name) => el('li', { textContent: name })),
+  );
+
+  // Call out the slots that work for the whole group — the thing the organiser
+  // actually wants to know.
+  const unanimous = [];
+  for (const date of dates) {
+    for (const [part, names] of Object.entries(grid[date])) {
+      if (total > 0 && names.length === total) {
+        unanimous.push(`${formatDay(date)} ${PART_LABELS[part].toLowerCase()}`);
+      }
+    }
+  }
+  document.getElementById('best').textContent =
+    total === 0
+      ? ''
+      : unanimous.length > 0
+        ? `Everyone is free: ${unanimous.join(', ')}.`
+        : 'No slot works for everyone yet — the fullest cells below are the closest.';
+
+  document.getElementById('gridHint').textContent =
+    total === 0 ? '' : 'The brighter the slot, the more of you are free.';
+
+  if (!toggleReady) {
+    view = preferredView(event);
+    createViewToggle(document.getElementById('viewToggle'), view, (next) => {
+      view = next;
+      renderNow();
+    });
+    toggleReady = true;
+  }
+  renderNow();
+
+  summary.hidden = false;
+  resultsCard.hidden = false;
+}
+
+/**
+ * Fill one slot. In month view the cell is a narrow strip with only room for
+ * the count, so the names live in the tooltip. List view shows them outright.
+ */
+function makeCell(cell, date, part, { compact }) {
+  const total = data.participants.length;
+  const names = data.grid[date][part];
+  const box = el('div', { className: compact ? 'cell strip' : 'cell' });
+
+  // How brightly this slot burns: the share of the group free in it. The
+  // stylesheet turns --lit into the cell's fill, so a fuller slot is a
+  // lighter one and the grid can be read at a glance.
+  box.style.setProperty('--lit', total > 0 ? names.length / total : 0);
+
+  // Only highlight a genuinely unanimous slot; without the `total > 0` guard
+  // an event with no replies would light up every cell.
+  if (total > 0 && names.length === total) {
+    box.classList.add('all-available');
+  }
+
+  if (compact) {
+    box.append(el('span', { className: 'part', textContent: PART_LABELS[part][0] }));
+  }
+
+  if (names.length === 0) {
+    box.append(el('span', { className: 'none', textContent: '—' }));
+  } else {
+    box.append(el('span', { className: 'count', textContent: `${names.length}/${total}` }));
+
+    if (compact) {
+      box.title = `${formatDay(date)} ${PART_LABELS[part].toLowerCase()} — ${names.join(', ')}`;
+      box.classList.add('has-names');
+    } else {
+      box.append(
+        el('ul', { className: 'names' }, names.map((name) => el('li', { textContent: name }))),
+      );
+    }
+  }
+
+  cell.append(box);
+}
+
+function renderNow() {
+  renderCalendar(document.getElementById('grid'), view, data.event, makeCell);
+}
+
+document.getElementById('refresh').addEventListener('click', load);
+load();
+</script>
+
+</body>
+</html>

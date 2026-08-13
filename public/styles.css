@@ -1,0 +1,734 @@
+/* Group Planner — "Daylight".
+ *
+ * The whole app is about morning, afternoon and evening, so the palette is the
+ * sky at those three hours. Two channels carry the meaning in the grid:
+ *   hue        = which part of the day a slot belongs to
+ *   luminance  = how much of the group is free (--lit, set per cell by JS)
+ * Brightness is never the only signal — the count is printed in every cell and
+ * a unanimous slot also gets a solid ring. */
+
+:root {
+  color-scheme: light dark;
+
+  --paper: #eaeef6;
+  --card: #ffffff;
+  --ink: #14172b;
+  --muted: #5c6480;
+  --line: #d6dce9;
+
+  /* First light, high sun, dusk. */
+  --morning: #10879b;
+  --afternoon: #b8791a;
+  --evening: #6250c0;
+
+  --danger: #a92f22;
+  --danger-bg: #fceceb;
+
+  /* How far a fully-available cell is allowed to light up. Kept below 100% so
+   * dark text stays readable on the brightest slot. */
+  --lit-max: 76%;
+
+  --radius: 14px;
+  --radius-sm: 8px;
+
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0f1220;
+    --card: #191d2f;
+    --ink: #e9ecf5;
+    --muted: #9aa3bd;
+    --line: #2b3149;
+
+    --morning: #3fc6da;
+    --afternoon: #ecab3c;
+    --evening: #9b87ff;
+
+    --danger: #ff9d92;
+    --danger-bg: #3a1c19;
+
+    /* Lit cells sit on a dark card, so they need to stay dim enough for the
+     * light text on top of them. */
+    --lit-max: 46%;
+  }
+}
+
+/* Each slot's time-of-day colour. common.js stamps data-part on the list
+ * cells, the month strips and the column headings. */
+[data-part="morning"] { --hue: var(--morning); }
+[data-part="afternoon"] { --hue: var(--afternoon); }
+[data-part="evening"] { --hue: var(--evening); }
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 2rem 1.25rem 5rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.55 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 62rem;
+  margin: 0 auto;
+}
+
+/* --- Page head ---------------------------------------------------------- */
+
+.page-head {
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+  font-family: var(--display);
+  font-size: clamp(2.1rem, 5.5vw, 3.1rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+}
+
+.subtitle {
+  margin: 0;
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 1.02rem;
+}
+
+/* --- The daylight band -------------------------------------------------- */
+/* The home page thesis: a day is three slots, and they are not interchangeable.
+ * The marker sits at the current time, so the band reads as today. */
+
+.daylight {
+  margin: 2rem 0 0;
+}
+
+.daylight-band {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  height: 4.5rem;
+  border-radius: var(--radius);
+  overflow: hidden;
+  animation: sweep 900ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.daylight-part {
+  display: flex;
+  align-items: flex-end;
+  padding: 0.6rem 0.85rem;
+  background: var(--hue);
+  /* The band runs at full saturation in both themes, so its labels are always
+   * dark rather than following the theme's text colour. */
+  color: #14172b;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.daylight-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ink);
+  opacity: 0.55;
+}
+
+.daylight-now::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.daylight-caption {
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@keyframes sweep {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* --- Cards -------------------------------------------------------------- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.card h2 {
+  margin: 0 0 0.4rem;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* --- Forms -------------------------------------------------------------- */
+
+.field {
+  display: block;
+  margin-bottom: 1.1rem;
+}
+
+.field > span {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+input[type="text"],
+input[type="date"] {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+}
+
+input[type="text"]:hover,
+input[type="date"]:hover {
+  border-color: var(--muted);
+}
+
+input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem;
+}
+
+.row .field {
+  flex: 1 1 12rem;
+  margin-bottom: 0;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* --- Buttons ------------------------------------------------------------ */
+
+button {
+  padding: 0.6rem 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+button:hover {
+  border-color: var(--ink);
+}
+
+button.primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--card);
+  font-weight: 600;
+}
+
+button.primary:hover {
+  background: color-mix(in oklab, var(--ink) 85%, var(--evening));
+  border-color: transparent;
+}
+
+button[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: 1.5rem;
+}
+
+a {
+  color: var(--ink);
+}
+
+.link {
+  font-weight: 600;
+  text-decoration: none;
+  text-decoration-color: var(--line);
+  text-underline-offset: 0.25em;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* --- Notices ------------------------------------------------------------ */
+
+.notice {
+  padding: 0.9rem 1.1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--card);
+  margin-bottom: 1.25rem;
+}
+
+.notice.error {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: currentColor;
+}
+
+.status {
+  min-height: 1.5rem;
+  margin: 0.9rem 0 0;
+  font-weight: 600;
+}
+
+.status.error {
+  color: var(--danger);
+}
+
+/* --- The grid, list view ------------------------------------------------ */
+
+.grid-scroll {
+  overflow-x: auto;
+}
+
+table.grid {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: separate;
+  border-spacing: 5px;
+}
+
+table.grid th {
+  text-align: left;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Column headings wear their own part's colour, which is the key to the
+ * whole grid — no separate legend needed for the hues. */
+table.grid thead th[data-part] {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hue);
+}
+
+th.day {
+  white-space: nowrap;
+  vertical-align: top;
+  padding-top: 0.6rem;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+th.day .dow {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+tr.weekend th.day .dow {
+  color: var(--evening);
+}
+
+td.slot {
+  padding: 0;
+  vertical-align: top;
+  width: 28%;
+  /* A nominal height lets the cell inside resolve height:100% against the row,
+   * so a day with one long list of names doesn't leave its neighbours stumpy. */
+  height: 1px;
+}
+
+/* --- Picking your availability ------------------------------------------ */
+
+button.pick {
+  width: 100%;
+  height: 100%;
+  min-height: 3.4rem;
+  border: 1px solid color-mix(in oklab, var(--hue) 22%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--hue) 5%, transparent);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  touch-action: none; /* let drag-to-paint work without the page scrolling */
+  user-select: none;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+button.pick:hover {
+  border-color: var(--hue);
+  background: color-mix(in oklab, var(--hue) 12%, transparent);
+}
+
+button.pick[aria-pressed="true"] {
+  background: color-mix(in oklab, var(--hue) var(--lit-max), transparent);
+  border-color: var(--hue);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* --- Reading the results ------------------------------------------------ */
+/* --lit is the share of the group free in this slot, set per cell in
+ * results.html. It is the only thing driving the fill. */
+
+.cell {
+  --lit: 0;
+  min-height: 3.4rem;
+  height: 100%;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--hue) calc(var(--lit) * var(--lit-max)), transparent);
+}
+
+.cell.all-available {
+  border: 2px solid var(--hue);
+  padding: calc(0.55rem - 1px) calc(0.6rem - 1px);
+}
+
+.cell .count {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.cell.all-available .count {
+  color: var(--ink);
+}
+
+/* The non-colour half of the "everyone is free" signal. */
+.cell.all-available .count::after {
+  content: " ✓ all";
+  letter-spacing: 0.1em;
+}
+
+.cell ul.names {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.cell .none {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+/* --- View toggle -------------------------------------------------------- */
+
+.grid-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.grid-head .hint {
+  margin: 0;
+  flex: 1 1 16rem;
+}
+
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+button.view-button {
+  border: none;
+  border-radius: 999px;
+  padding: 0.35rem 0.95rem;
+  font-size: 0.85rem;
+  background: transparent;
+}
+
+button.view-button:hover {
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
+}
+
+button.view-button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--card);
+  font-weight: 600;
+}
+
+button.view-button[aria-pressed="true"]:hover {
+  background: var(--ink);
+}
+
+/* --- Month view --------------------------------------------------------- */
+
+.month {
+  min-width: 40rem;
+}
+
+.month + .month {
+  margin-top: 2rem;
+}
+
+.month h2 {
+  margin: 0 0 0.7rem;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.dow-head {
+  padding: 0.25rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.day-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 5.75rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+/* Padding before the 1st and after the last day of the month. */
+.day-cell.empty {
+  border: none;
+}
+
+/* Days in this month but outside the event's own range. */
+.day-cell.out {
+  border-style: dashed;
+  opacity: 0.4;
+}
+
+.day-cell.weekend .day-num {
+  color: var(--evening);
+}
+
+.day-num {
+  padding-left: 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.strip-wrap {
+  flex: 1;
+  display: flex;
+}
+
+button.pick.strip {
+  min-height: 0;
+  padding: 0.1rem 0.4rem;
+  text-align: left;
+  font-size: 0.72rem;
+  border-radius: 5px;
+}
+
+.cell.strip {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.cell.strip.all-available {
+  border-width: 1px;
+  padding: 0.1rem 0.35rem;
+}
+
+.cell.strip .part {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  /* Tinted towards its part's colour but pulled back to the text colour, so it
+   * stays readable when the strip behind it lights up in that same hue. */
+  color: color-mix(in oklab, var(--hue) 50%, var(--ink));
+}
+
+.cell.strip .count {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--ink);
+}
+
+/* Space is too tight for the "✓ all" suffix on a strip; the ring carries it. */
+.cell.strip.all-available .count {
+  font-weight: 700;
+}
+
+.cell.strip.all-available .count::after {
+  content: " ✓";
+}
+
+.cell.strip .none {
+  font-size: 0.72rem;
+}
+
+/* Names are in the tooltip, so hint that the strip is worth hovering. */
+.cell.strip.has-names {
+  cursor: help;
+}
+
+/* --- Results extras ----------------------------------------------------- */
+
+#peopleCount {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.people li {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+#best {
+  margin-bottom: 0;
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.swatch {
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 4px;
+  border: 2px solid var(--afternoon);
+  background: color-mix(in oklab, var(--afternoon) var(--lit-max), transparent);
+}
+
+.share {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.share input {
+  flex: 1 1 20rem;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 30rem) {
+  body {
+    padding: 1.25rem 0.9rem 4rem;
+  }
+
+  .card {
+    padding: 1.1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

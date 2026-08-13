@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Group Planner — create an event</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<main class="page">
+  <header class="page-head">
+    <p class="eyebrow">Group planner</p>
+    <h1>When is everyone free?</h1>
+    <p class="subtitle">
+      Pick a date range, share one link, and watch the slot that works for everyone light up.
+    </p>
+
+    <div class="daylight">
+      <div class="daylight-band" role="img" aria-label="A day, split into morning, afternoon and evening">
+        <div class="daylight-part" data-part="morning">Morning</div>
+        <div class="daylight-part" data-part="afternoon">Afternoon</div>
+        <div class="daylight-part" data-part="evening">Evening</div>
+        <div class="daylight-now" id="now" hidden></div>
+      </div>
+      <p class="daylight-caption">Every day splits three ways. People tick the parts they can make.</p>
+    </div>
+  </header>
+
+  <section class="card" id="createCard">
+    <label class="field">
+      <span>What are you planning?</span>
+      <input id="title" type="text" maxlength="100" placeholder="e.g. Summer BBQ">
+    </label>
+
+    <div class="row">
+      <label class="field">
+        <span>First day</span>
+        <input id="startDate" type="date">
+      </label>
+      <label class="field">
+        <span>Last day</span>
+        <input id="endDate" type="date">
+      </label>
+    </div>
+
+    <p class="hint" id="rangeHint"></p>
+
+    <div class="actions">
+      <button id="create" class="primary" type="button">Create event</button>
+    </div>
+    <p id="status" class="status" role="status"></p>
+  </section>
+
+  <section class="card" id="shareCard" hidden>
+    <h2 id="shareTitle">Your event is ready</h2>
+    <p class="hint">Send this link to everyone you're inviting. Anyone with it can add their availability and see the results.</p>
+    <div class="share">
+      <input id="shareLink" type="text" readonly>
+      <button id="copy" type="button">Copy link</button>
+    </div>
+    <div class="actions">
+      <a id="openEvent" class="link" href="#">Add your own availability →</a>
+      <a id="openResults" class="link" href="#">See results →</a>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { validateRange, MAX_RANGE_DAYS } from './dates.js';
+import { api } from './common.js';
+
+// Put the marker at the current time so the band reads as today rather than as
+// decoration. The band spans 06:00 to midnight; before 6am there is nothing to
+// point at, so the marker stays hidden.
+{
+  const hours = new Date().getHours() + new Date().getMinutes() / 60;
+  if (hours >= 6) {
+    const marker = document.getElementById('now');
+    marker.style.left = `${((hours - 6) / 18) * 100}%`;
+    marker.hidden = false;
+  }
+}
+
+document.getElementById('rangeHint').textContent =
+  `Each day is split into morning, afternoon and evening. Up to ${MAX_RANGE_DAYS} days — ` +
+  'longer ranges show as a month calendar.';
+
+const titleInput = document.getElementById('title');
+const startInput = document.getElementById('startDate');
+const endInput = document.getElementById('endDate');
+const createButton = document.getElementById('create');
+const status = document.getElementById('status');
+const createCard = document.getElementById('createCard');
+const shareCard = document.getElementById('shareCard');
+
+/** Today in the visitor's own timezone, as 'YYYY-MM-DD'. */
+function todayPlus(days) {
+  const now = new Date();
+  now.setDate(now.getDate() + days);
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+startInput.value = todayPlus(0);
+endInput.value = todayPlus(6);
+
+function setStatus(message, isError = false) {
+  status.textContent = message;
+  status.classList.toggle('error', isError);
+}
+
+// Keep the end date sensible when the start date moves past it.
+startInput.addEventListener('change', () => {
+  if (endInput.value && endInput.value < startInput.value) {
+    endInput.value = startInput.value;
+  }
+});
+
+async function create() {
+  const title = titleInput.value.trim();
+  if (!title) {
+    setStatus('Give your event a name first.', true);
+    titleInput.focus();
+    return;
+  }
+
+  // Same check the API runs, just without the round trip.
+  const rangeError = validateRange(startInput.value, endInput.value);
+  if (rangeError) {
+    setStatus(rangeError, true);
+    return;
+  }
+
+  createButton.disabled = true;
+  setStatus('Creating…');
+
+  try {
+    const { id } = await api('/api/events', {
+      method: 'POST',
+      body: JSON.stringify({ title, startDate: startInput.value, endDate: endInput.value }),
+    });
+    showShare(id, title);
+  } catch (error) {
+    setStatus(error.message, true);
+    createButton.disabled = false;
+  }
+}
+
+function showShare(id, title) {
+  const eventUrl = new URL(`./event.html?id=${encodeURIComponent(id)}`, location.href).href;
+  const resultsUrl = new URL(`./results.html?id=${encodeURIComponent(id)}`, location.href).href;
+
+  document.getElementById('shareTitle').textContent = `"${title}" is ready`;
+  document.getElementById('shareLink').value = eventUrl;
+  document.getElementById('openEvent').href = eventUrl;
+  document.getElementById('openResults').href = resultsUrl;
+
+  createCard.hidden = true;
+  shareCard.hidden = false;
+}
+
+document.getElementById('copy').addEventListener('click', async (event) => {
+  const field = document.getElementById('shareLink');
+  const button = event.currentTarget;
+  try {
+    await navigator.clipboard.writeText(field.value);
+  } catch {
+    // Clipboard access needs a secure context; selecting the text is the fallback.
+    field.select();
+  }
+  button.textContent = 'Copied';
+  setTimeout(() => { button.textContent = 'Copy link'; }, 1500);
+});
+
+createButton.addEventListener('click', create);
+titleInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') create();
+});
+</script>
+
+</body>
+</html>
