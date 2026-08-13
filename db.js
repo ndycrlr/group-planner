@@ -7,6 +7,8 @@
 // for local development and the test suite.
 
 import { randomBytes } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS events (
@@ -64,10 +66,19 @@ export function createStore({ url, authToken }) {
   let opening = null;
 
   async function open() {
+    const isFile = url.startsWith('file:');
+
+    // libSQL opens a file but will not create the directory holding it, and
+    // reports the miss only as SQLite error 14. Making it here turns
+    // PLANNER_DB=data/planner.db into something that just works.
+    if (isFile) {
+      await mkdir(path.dirname(url.slice('file:'.length)), { recursive: true });
+    }
+
     // The default build can open a local file but carries native bindings; the
     // web build is pure JS over HTTP. Choosing per URL keeps the native code
     // out of a serverless bundle that only ever talks to a remote database.
-    const { createClient } = url.startsWith('file:')
+    const { createClient } = isFile
       ? await import('@libsql/client')
       : await import('@libsql/client/web');
 
@@ -79,7 +90,15 @@ export function createStore({ url, authToken }) {
   function connect() {
     // Memoised, so the schema statements run once per process rather than once
     // per request — including across warm serverless invocations.
-    opening ??= open();
+    //
+    // A failure must not be memoised with it. Serverless instances are long
+    // lived: if a cold start briefly cannot reach the database, caching the
+    // rejected promise would fail every later request on that instance for as
+    // long as it survives. Clearing the memo lets the next request try again.
+    opening ??= open().catch((error) => {
+      opening = null;
+      throw error;
+    });
     return opening;
   }
 

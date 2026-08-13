@@ -4,6 +4,9 @@ node_modules/
 *.db-wal
 *.db-shm
 
+# Vercel
+.vercel/
+
 # Playwright
 .test-pending
 .test-tmp/

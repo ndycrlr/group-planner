@@ -134,6 +134,21 @@ test('keeps your ticks through a reload', async ({ page, request }) => {
   );
 });
 
+test('a whole dragged run survives a reload', async ({ page, request }) => {
+  const { id } = await createEvent(request);
+  await page.goto(`/event.html?id=${id}`);
+
+  // The draft write is coalesced to idle time, so a drag followed straight away
+  // by a reload is the case that would lose ticks if the flush ever regressed.
+  const dates = ['2026-08-17', '2026-08-18', '2026-08-19'];
+  await dragAcross(page, dates.map((date) => pickButton(page, date, 'afternoon')));
+  await page.reload();
+
+  for (const date of dates) {
+    await expect(pickButton(page, date, 'afternoon')).toHaveAttribute('aria-pressed', 'true');
+  }
+});
+
 test('remembers your name for next time', async ({ page, request }) => {
   const first = await createEvent(request, { title: 'One' });
   await page.goto(`/event.html?id=${first.id}`);

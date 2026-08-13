@@ -74,14 +74,45 @@ function setStatus(message, isError = false) {
   status.classList.toggle('error', isError);
 }
 
-/** Remember ticks locally so a reload before submitting doesn't lose them. */
-function saveDraft() {
+const scheduleIdle = window.requestIdleCallback
+  ? window.requestIdleCallback.bind(window)
+  : (run) => setTimeout(run, 0);
+const cancelIdle = window.cancelIdleCallback
+  ? window.cancelIdleCallback.bind(window)
+  : clearTimeout;
+
+let pendingDraft = null;
+
+function writeDraft() {
+  pendingDraft = null;
   try {
     localStorage.setItem(selectionKey, JSON.stringify([...selected]));
   } catch {
     // Private browsing can refuse storage; the draft is a nicety, not required.
   }
 }
+
+/**
+ * Remember ticks locally so a reload before submitting doesn't lose them.
+ *
+ * Coalesced rather than written per slot: a drag calls this once for every cell
+ * it crosses, and each write serialises the whole selection, so writing eagerly
+ * makes a long drag do O(n^2) work on the main thread it needs for painting.
+ * One write once the thread is free does the same job.
+ */
+function saveDraft() {
+  if (pendingDraft !== null) cancelIdle(pendingDraft);
+  pendingDraft = scheduleIdle(writeDraft);
+}
+
+// Idle time may never arrive before the page goes away, and losing a drag to a
+// quick reload is exactly what the draft exists to prevent.
+addEventListener('pagehide', () => {
+  if (pendingDraft !== null) {
+    cancelIdle(pendingDraft);
+    writeDraft();
+  }
+});
 
 function loadDraft() {
   try {
@@ -120,8 +151,10 @@ function setSlot(key, on) {
 // cell decides whether the drag is selecting or clearing.
 let painting = null;
 
-document.addEventListener('pointerup', () => { painting = null; });
-document.addEventListener('pointercancel', () => { painting = null; });
+// Passive: neither of these calls preventDefault, so telling the browser up
+// front means it never waits on them before scrolling.
+document.addEventListener('pointerup', () => { painting = null; }, { passive: true });
+document.addEventListener('pointercancel', () => { painting = null; }, { passive: true });
 
 function makeCell(cell, date, part, { compact }) {
   const key = `${date}|${part}`;
