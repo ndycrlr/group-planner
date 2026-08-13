@@ -14,14 +14,16 @@ npm start
 
 Then open <http://localhost:3000>.
 
-Needs **Node 22.5 or newer** — storage uses the built-in `node:sqlite`, so Express is
-the only dependency and there is nothing to compile. Data lives in `planner.db`, created
-next to `server.js` on first run.
+Needs **Node 20 or newer**. Storage is SQLite through libSQL, which reads a plain local
+file by default — `planner.db`, created next to `server.js` on first run — and can also
+talk to a hosted database over the network without any change to the schema.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `3000` | Port to listen on |
-| `PLANNER_DB` | `./planner.db` | Where the SQLite file lives |
+| `PLANNER_DB` | `./planner.db` | Where the local SQLite file lives |
+| `TURSO_DATABASE_URL` | — | A hosted libSQL database. Overrides `PLANNER_DB` when set |
+| `TURSO_AUTH_TOKEN` | — | Token for that database |
 
 ## Tests
 
@@ -82,8 +84,22 @@ case-insensitively, so `andy` and `Andy` are the same person.
 
 `localhost` links only work on your own computer. On a home or office network, find your
 machine's IP (`ipconfig` on Windows) and share `http://<your-ip>:3000/event.html?id=…`;
-you may need to allow Node through the Windows firewall. For anyone outside your network,
-deploy it to a host that keeps `planner.db` on a persistent disk.
+you may need to allow Node through the Windows firewall.
+
+## Deploying to Vercel
+
+A local file cannot back the app on Vercel: the filesystem is read-only, the writable
+`/tmp` belongs to one microVM out of many, and it is wiped when a function is archived.
+Replies would go missing between instances. So production needs a hosted database.
+
+1. Create a database at [Turso](https://turso.tech) and note its URL and auth token.
+2. Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the Vercel project's environment
+   variables. The schema creates itself on first request.
+3. Deploy. `vercel.json` sends `/api/*` to the Express app in `api/index.js`; everything
+   in `public/` is served straight from the CDN.
+
+No other host-specific work is needed — `app.js` holds the app with no listener, and
+`server.js` only exists to bind a port locally.
 
 There are no accounts and no passwords: anyone who has an event link can see and change
 that event's responses, so treat the link as semi-private.
@@ -91,8 +107,10 @@ that event's responses, so treat the link as semi-private.
 ## Layout
 
 ```
-server.js          Express API + serves public/
-db.js              SQLite schema and queries (node:sqlite)
+app.js             Express API + serves public/, with no listener attached
+server.js          binds app.js to a port for local use
+api/index.js       the same app, as a Vercel function
+db.js              SQLite schema and queries, over libSQL
 public/
   index.html       create an event
   event.html       pick your availability

@@ -15,9 +15,10 @@
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=20.0.0"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.4",
     "express": "^5.1.0"
   },
   "devDependencies": {

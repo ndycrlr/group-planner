@@ -31,9 +31,9 @@ npm run test:headed      # watch it drive a real browser
 npm run test:report      # open the HTML report after a failure
 ```
 
-Requires **Node 22.5+** (`node:sqlite`). There is no build step, no bundler and no linter — the browser loads `public/*.js` directly as ES modules. Playwright is the only dev dependency; `npx playwright install chromium` is needed once on a fresh checkout.
+Requires **Node 20+**. There is no build step, no bundler and no linter — the browser loads `public/*.js` directly as ES modules. Playwright is the only dev dependency; `npx playwright install chromium` is needed once on a fresh checkout.
 
-Env vars: `PORT` (default 3000), `PLANNER_DB` (default `./planner.db`, gitignored, created on first run). Point `PLANNER_DB` at a scratch file when experimenting so you don't disturb existing data.
+Env vars: `PORT` (default 3000), `PLANNER_DB` (default `./planner.db`, gitignored, created on first run), and `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` which override `PLANNER_DB` with a hosted database. Point `PLANNER_DB` at a scratch file when experimenting so you don't disturb existing data.
 
 ## Tests
 
@@ -49,8 +49,10 @@ Tests import from `public/dates.js` directly (`tests/helpers.js`), addressing sl
 
 Three-layer, no framework beyond Express:
 
-- `server.js` — Express 5 API + static host for `public/`. All validation lives here (`requireString`, `requireEvent`, `cleanSlots`) and throws `HttpError`, which the single error middleware turns into `{"error": "..."}` at the right status. Pages display that message verbatim, so error strings are user-facing copy.
-- `db.js` — `createStore(file)` returns the whole storage API over `node:sqlite`. Schema is applied idempotently at startup; all statements are prepared once.
+- `app.js` — Express 5 API + static host for `public/`, exported **without a listener**. All validation lives here (`requireString`, `requireEvent`, `cleanSlots`) and throws `HttpError`, which the single error middleware turns into `{"error": "..."}` at the right status. Pages display that message verbatim, so error strings are user-facing copy.
+- `server.js` — imports `app.js` and calls `listen`. The only file that binds a port, and the one `npm start` runs.
+- `api/index.js` — re-exports the same app for Vercel, which invokes a function per request. Nothing may listen there, which is the whole reason the app and the listener are separate files.
+- `db.js` — `createStore({ url, authToken })` returns the whole storage API over libSQL. Every method is **async**. The connection and the schema are created lazily and memoised, so importing the module is free and the schema statements run once per process rather than once per request.
 - `public/` — three plain HTML pages (`index` create, `event` pick, `results` view), each with an inline `<script type="module">`, sharing `common.js` and `dates.js`.
 
 ### The two invariants worth knowing
@@ -68,6 +70,14 @@ share of the group free in that slot, and the fill is `color-mix(… var(--hue) 
 a cell type, set both custom properties or it will render uncoloured. Brightness is never
 the only signal: the count text and the `✓ all` ring carry it too, and `--lit-max` is capped
 per theme so text stays readable on the brightest cell.
+
+### Storage and deployment
+
+libSQL is SQLite that can also be reached over a network, which is what makes Vercel possible: its filesystem is read-only, its writable `/tmp` is per-microVM, and it is wiped when a function is archived, so a local file cannot hold shared state. A `file:` URL keeps the old local behaviour for development and tests; `TURSO_DATABASE_URL` switches to a hosted database with no schema change.
+
+`db.js` picks its client from the URL — the default build for `file:` (it can open a local file but carries native bindings) and `@libsql/client/web` otherwise (pure JS over HTTP, so no native code lands in a serverless bundle). Paths are resolved to absolute before going into the `file:` URL; on Windows a relative path is not a valid URL body.
+
+Two things to preserve when touching `db.js`: `lastInsertRowid` comes back as a **bigint**, so it needs `Number()`; and libSQL rows are array-like with column names attached, so they must be spread into plain objects (`toPlain`) or `res.json()` emits arrays instead of objects. `saveResponse` deletes a person's slots explicitly rather than trusting `ON DELETE CASCADE` — the cascade is still declared, but foreign-key enforcement is a per-connection property and the explicit delete does not depend on it.
 
 ### Data model
 

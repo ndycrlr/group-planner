@@ -1,7 +1,11 @@
-// SQLite storage, using Node's built-in `node:sqlite` (Node 22.5+).
-// Built in means no native module to compile, so `npm install` only pulls Express.
+// Storage on libSQL — SQLite that can also be reached over the network.
+//
+// The schema below is the same SQLite it always was, but the connection is no
+// longer a file handle: Vercel's filesystem is read-only, and its writable
+// /tmp is per-microVM and wiped when a function is archived, so a local file
+// cannot hold shared state there. A `file:` URL still gives the old behaviour
+// for local development and the test suite.
 
-import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
 
 const SCHEMA = `
@@ -38,99 +42,151 @@ function newEventId() {
   return randomBytes(6).toString('base64url');
 }
 
-export function createStore(file) {
-  const db = new DatabaseSync(file);
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec(SCHEMA);
+/** libSQL reports a broken UNIQUE constraint as a generic constraint error. */
+function isUniqueViolation(error) {
+  return error?.code === 'SQLITE_CONSTRAINT' && /UNIQUE/i.test(String(error.message));
+}
 
-  const statements = {
-    insertEvent: db.prepare(
-      'INSERT INTO events (id, title, start_date, end_date, created_at) VALUES (?, ?, ?, ?, ?)',
-    ),
-    selectEvent: db.prepare(
-      'SELECT id, title, start_date AS startDate, end_date AS endDate FROM events WHERE id = ?',
-    ),
-    deleteResponse: db.prepare('DELETE FROM responses WHERE event_id = ? AND name = ?'),
-    insertResponse: db.prepare(
-      'INSERT INTO responses (event_id, name, created_at) VALUES (?, ?, ?)',
-    ),
-    insertSlot: db.prepare(
-      'INSERT INTO slots (response_id, date, part) VALUES (?, ?, ?)',
-    ),
-    selectParticipants: db.prepare(
-      'SELECT name FROM responses WHERE event_id = ? ORDER BY name COLLATE NOCASE',
-    ),
-    selectSlots: db.prepare(`
-      SELECT r.name AS name, s.date AS date, s.part AS part
-        FROM slots s
-        JOIN responses r ON r.id = s.response_id
-       WHERE r.event_id = ?
-       ORDER BY r.name COLLATE NOCASE, s.date, s.part
-    `),
-  };
+/**
+ * libSQL rows are array-like with the column names attached. Spreading gives a
+ * plain object, which is what res.json() needs to emit an object rather than
+ * an array.
+ */
+function toPlain(row) {
+  return row === undefined ? undefined : { ...row };
+}
 
-  /** Run `work` in a transaction, rolling back if it throws. */
-  function transaction(work) {
-    db.exec('BEGIN IMMEDIATE');
-    try {
-      const result = work();
-      db.exec('COMMIT');
-      return result;
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
+/**
+ * `url` is either `file:/absolute/path.db` or a libsql:// URL for Turso.
+ * Nothing connects until the first query, so importing this module is free.
+ */
+export function createStore({ url, authToken }) {
+  let opening = null;
+
+  async function open() {
+    // The default build can open a local file but carries native bindings; the
+    // web build is pure JS over HTTP. Choosing per URL keeps the native code
+    // out of a serverless bundle that only ever talks to a remote database.
+    const { createClient } = url.startsWith('file:')
+      ? await import('@libsql/client')
+      : await import('@libsql/client/web');
+
+    const client = createClient(authToken ? { url, authToken } : { url });
+    await client.executeMultiple(SCHEMA);
+    return client;
+  }
+
+  function connect() {
+    // Memoised, so the schema statements run once per process rather than once
+    // per request — including across warm serverless invocations.
+    opening ??= open();
+    return opening;
   }
 
   return {
-    createEvent({ title, startDate, endDate }) {
+    async createEvent({ title, startDate, endDate }) {
+      const client = await connect();
+
       // Retry on the vanishingly unlikely id collision rather than 500ing.
       for (let attempt = 0; attempt < 5; attempt++) {
         const id = newEventId();
         try {
-          statements.insertEvent.run(id, title, startDate, endDate, new Date().toISOString());
+          await client.execute({
+            sql: 'INSERT INTO events (id, title, start_date, end_date, created_at) VALUES (?, ?, ?, ?, ?)',
+            args: [id, title, startDate, endDate, new Date().toISOString()],
+          });
           return id;
         } catch (error) {
-          if (!String(error.message).includes('UNIQUE')) throw error;
+          if (!isUniqueViolation(error)) throw error;
         }
       }
       throw new Error('Could not allocate an event id.');
     },
 
-    getEvent(id) {
-      return statements.selectEvent.get(id);
+    async getEvent(id) {
+      const client = await connect();
+      const { rows } = await client.execute({
+        sql: 'SELECT id, title, start_date AS startDate, end_date AS endDate FROM events WHERE id = ?',
+        args: [id],
+      });
+      return toPlain(rows[0]);
     },
 
     /**
      * Save one person's availability. Submitting the same name again replaces
-     * their previous answer instead of adding a duplicate: the old row is
-     * deleted and its slots go with it via ON DELETE CASCADE.
+     * their previous answer instead of adding a duplicate.
+     *
+     * The slots are deleted explicitly rather than left to ON DELETE CASCADE:
+     * the cascade is still in the schema, but whether foreign keys are enforced
+     * is a per-connection property, and this way the old rows go regardless.
      */
-    saveResponse(eventId, name, slots) {
-      transaction(() => {
-        statements.deleteResponse.run(eventId, name);
-        const { lastInsertRowid } = statements.insertResponse.run(
-          eventId,
-          name,
-          new Date().toISOString(),
-        );
-        const responseId = Number(lastInsertRowid);
-        for (const { date, part } of slots) {
-          statements.insertSlot.run(responseId, date, part);
+    async saveResponse(eventId, name, slots) {
+      const client = await connect();
+      const transaction = await client.transaction('write');
+
+      try {
+        await transaction.execute({
+          sql: `DELETE FROM slots WHERE response_id IN (
+                  SELECT id FROM responses WHERE event_id = ? AND name = ?
+                )`,
+          args: [eventId, name],
+        });
+        await transaction.execute({
+          sql: 'DELETE FROM responses WHERE event_id = ? AND name = ?',
+          args: [eventId, name],
+        });
+
+        const inserted = await transaction.execute({
+          sql: 'INSERT INTO responses (event_id, name, created_at) VALUES (?, ?, ?)',
+          args: [eventId, name, new Date().toISOString()],
+        });
+        const responseId = Number(inserted.lastInsertRowid);
+
+        // One statement rather than one per slot: over a network connection the
+        // round trips are the cost. An event is capped at 92 days x 3 parts, so
+        // this stays well inside SQLite's limit on bound variables.
+        if (slots.length > 0) {
+          await transaction.execute({
+            sql: `INSERT INTO slots (response_id, date, part) VALUES ${slots
+              .map(() => '(?, ?, ?)')
+              .join(', ')}`,
+            args: slots.flatMap(({ date, part }) => [responseId, date, part]),
+          });
         }
-      });
+
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
     },
 
     /** Participant names plus one row per (name, date, part) they picked. */
-    getResponses(eventId) {
+    async getResponses(eventId) {
+      const client = await connect();
+      const [participants, slots] = await Promise.all([
+        client.execute({
+          sql: 'SELECT name FROM responses WHERE event_id = ? ORDER BY name COLLATE NOCASE',
+          args: [eventId],
+        }),
+        client.execute({
+          sql: `SELECT r.name AS name, s.date AS date, s.part AS part
+                  FROM slots s
+                  JOIN responses r ON r.id = s.response_id
+                 WHERE r.event_id = ?
+                 ORDER BY r.name COLLATE NOCASE, s.date, s.part`,
+          args: [eventId],
+        }),
+      ]);
+
       return {
-        participants: statements.selectParticipants.all(eventId).map((row) => row.name),
-        slots: statements.selectSlots.all(eventId),
+        participants: participants.rows.map((row) => row.name),
+        slots: slots.rows.map(toPlain),
       };
     },
 
-    close() {
-      db.close();
+    async close() {
+      if (opening) (await opening).close();
     },
   };
 }

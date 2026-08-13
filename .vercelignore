@@ -1,0 +1,12 @@
+# None of this belongs in a deployment bundle.
+tests/
+.test-tmp/
+.test-pending
+test-results/
+playwright-report/
+playwright.config.js
+scripts/
+.githooks/
+.claude/
+.agents/
+*.db
