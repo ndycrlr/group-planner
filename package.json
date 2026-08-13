@@ -6,12 +6,19 @@
   "description": "Collect group availability across a range of days, split into morning / afternoon / evening.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report"
   },
   "engines": {
     "node": ">=22.5.0"
   },
   "dependencies": {
     "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }

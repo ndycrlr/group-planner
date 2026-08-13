@@ -9,9 +9,27 @@ npm install     # Express is the only dependency
 npm start       # node server.js -> http://localhost:3000
 ```
 
-Requires **Node 22.5+** (`node:sqlite`). There is no build step, no bundler, no linter, and no test suite — the browser loads `public/*.js` directly as ES modules. Verify changes by running the server and exercising the pages, or by hitting the API with curl (see the examples at the bottom of `README.md`).
+```sh
+npm test                 # the whole Playwright suite (~7s)
+npx playwright test tests/results.spec.js          # one file
+npx playwright test -g "marks the slot everyone"   # one test by name
+npm run test:headed      # watch it drive a real browser
+npm run test:report      # open the HTML report after a failure
+```
+
+Requires **Node 22.5+** (`node:sqlite`). There is no build step, no bundler and no linter — the browser loads `public/*.js` directly as ES modules. Playwright is the only dev dependency; `npx playwright install chromium` is needed once on a fresh checkout.
 
 Env vars: `PORT` (default 3000), `PLANNER_DB` (default `./planner.db`, gitignored, created on first run). Point `PLANNER_DB` at a scratch file when experimenting so you don't disturb existing data.
+
+## Tests
+
+`playwright.config.js` starts its own server on port **3210** against a throwaway database in `.test-tmp/`, wiped at the start of every run. It never reuses a server you already have running, so a dev server on 3000 and its real `planner.db` are never touched. The wipe is guarded to the main process — Playwright re-evaluates the config inside each worker, and by then the server holds the file open.
+
+Tests import from `public/dates.js` directly (`tests/helpers.js`), addressing slots by the label the app really renders. A change to the date helpers therefore shows up as a test failure rather than as silent drift. Every test creates its own event, so they run fully parallel without interfering.
+
+`tests/api.spec.js` runs without a browser page — a failure there points at `server.js` or `db.js`, not the front end.
+
+**The suite runs automatically.** `.claude/settings.json` wires two hooks to `scripts/run-tests-hook.sh`: a `PostToolUse` hook runs it after any edit to a file the tests cover (`public/**`, `server.js`, `db.js`, `tests/**`, `playwright.config.js`), and a `Stop` hook re-runs it at the end of a turn if any edit since the last green run has gone unchecked — tracked by the `.test-pending` marker file. A failure exits 2, which feeds the output back rather than failing quietly.
 
 ## Architecture
 

@@ -3,3 +3,11 @@ node_modules/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Playwright
+.test-pending
+.test-tmp/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/

@@ -23,6 +23,17 @@ next to `server.js` on first run.
 | `PORT` | `3000` | Port to listen on |
 | `PLANNER_DB` | `./planner.db` | Where the SQLite file lives |
 
+## Tests
+
+```sh
+npx playwright install chromium   # once, on a fresh checkout
+npm test
+```
+
+74 Playwright tests cover the API contract and all three pages. They run against
+their own server on port 3210 with a throwaway database, so your real `planner.db`
+is never touched.
+
 ## How it's used
 
 1. **Create** — on the home page, name the activity and choose the first and last day

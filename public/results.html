@@ -151,9 +151,8 @@ function makeCell(cell, date, part, { compact }) {
 
   // Only highlight a genuinely unanimous slot; without the `total > 0` guard
   // an event with no replies would light up every cell.
-  if (total > 0 && names.length === total) {
-    box.classList.add('all-available');
-  }
+  const everyone = total > 0 && names.length === total;
+  if (everyone) box.classList.add('all-available');
 
   if (compact) {
     box.append(el('span', { className: 'part', textContent: PART_LABELS[part][0] }));
@@ -162,7 +161,13 @@ function makeCell(cell, date, part, { compact }) {
   if (names.length === 0) {
     box.append(el('span', { className: 'none', textContent: '—' }));
   } else {
-    box.append(el('span', { className: 'count', textContent: `${names.length}/${total}` }));
+    // The tick is real text rather than a CSS ::after, so that the non-colour
+    // half of the "everyone is free" signal is actually in the accessibility
+    // tree. A strip has no room for the word.
+    const tick = everyone ? (compact ? ' ✓' : ' ✓ all') : '';
+    box.append(
+      el('span', { className: 'count', textContent: `${names.length}/${total}${tick}` }),
+    );
 
     if (compact) {
       box.title = `${formatDay(date)} ${PART_LABELS[part].toLowerCase()} — ${names.join(', ')}`;

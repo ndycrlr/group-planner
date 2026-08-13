@@ -463,12 +463,6 @@ button.pick[aria-pressed="true"] {
   color: var(--ink);
 }
 
-/* The non-colour half of the "everyone is free" signal. */
-.cell.all-available .count::after {
-  content: " ✓ all";
-  letter-spacing: 0.1em;
-}
-
 .cell ul.names {
   list-style: none;
   margin: 0;
@@ -637,13 +631,8 @@ button.pick.strip {
   color: var(--ink);
 }
 
-/* Space is too tight for the "✓ all" suffix on a strip; the ring carries it. */
 .cell.strip.all-available .count {
   font-weight: 700;
-}
-
-.cell.strip.all-available .count::after {
-  content: " ✓";
 }
 
 .cell.strip .none {

@@ -3,5 +3,34 @@
     "csharp-lsp@claude-plugins-official": true,
     "github@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "bash ./scripts/run-tests-hook.sh --after-edit",
+            "timeout": 180,
+            "statusMessage": "Running Playwright suite"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "bash ./scripts/run-tests-hook.sh --if-pending",
+            "timeout": 180,
+            "statusMessage": "Checking the Playwright suite"
+          }
+        ]
+      }
+    ]
   }
 }
