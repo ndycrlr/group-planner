@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+#
+# Refuse to push to main. Every change lands through a pull request, so that the
+# review Action gets to see it before it is on the default branch.
+#
+# Activated by core.hooksPath, which `npm run hooks:install` sets. Git hooks
+# live outside .git so they can be committed and shared.
+#
+# This repository is private on a free plan, where branch protection and
+# rulesets are unavailable, so the guard has to live on this side of the wire.
+# That makes it a guardrail rather than a lock: ALLOW_PUSH_MAIN=1 goes through.
+
+set -uo pipefail
+
+PROTECTED='main master'
+
+if [ "${ALLOW_PUSH_MAIN:-}" = "1" ]; then
+  echo "pre-push: ALLOW_PUSH_MAIN=1 — pushing to a protected branch anyway." >&2
+  exit 0
+fi
+
+fail() {
+  cat >&2 <<EOF
+pre-push: refusing to push to "$1".
+
+Changes reach main through a pull request, never a local merge — the review
+Action runs on the PR when it opens, and a direct push skips it entirely.
+
+  git checkout -b <type>/<short-name>   # if you are not on a branch already
+  git push -u origin <type>/<short-name>
+  gh pr create --fill                   # the review runs from here
+  gh pr merge --squash --delete-branch
+
+The PR title becomes the commit subject under --squash, so it has to be a
+Conventional Commit itself: GitHub squashes server-side, where .githooks/
+commit-msg cannot run.
+
+If you genuinely have to bypass this: ALLOW_PUSH_MAIN=1 git push
+EOF
+  exit 1
+}
+
+# Git feeds one "<local ref> <local sha> <remote ref> <remote sha>" line per ref
+# being pushed on stdin. A deletion has an all-zero local sha, and is refused
+# too — deleting main is not less drastic than writing to it.
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  [ -n "${remote_ref:-}" ] || continue
+
+  branch="${remote_ref#refs/heads/}"
+  [ "$branch" != "$remote_ref" ] || continue   # not a branch: tags pass through
+
+  case " $PROTECTED " in
+    *" $branch "*) fail "$branch" ;;
+  esac
+done
+
+exit 0
