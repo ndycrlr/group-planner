@@ -16,20 +16,20 @@
             "timeout": 180,
             "statusMessage": "Running Playwright suite"
           }
-        ]
-      },
-      {
-        "matcher": "Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "shell": "bash",
-            "command": "bash ./scripts/grill-hook.sh",
-            "timeout": 15,
-            "statusMessage": "Checking for a new commit to grill"
-          }
-        ]
-      }
+        ]}
+      // ,
+      // {
+      //   "matcher": "Bash|PowerShell",
+      //   "hooks": [
+      //     {
+      //       "type": "command",
+      //       "shell": "bash",
+      //       "command": "bash ./scripts/grill-hook.sh",
+      //       "timeout": 15,
+      //       "statusMessage": "Checking for a new commit to grill"
+      //     }
+      //   ]
+      // }
     ],
     "Stop": [
       {
