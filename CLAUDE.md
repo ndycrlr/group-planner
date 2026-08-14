@@ -20,7 +20,7 @@ conventional and avoids a non-conventional merge commit.
 
 ```sh
 npm install     # Express is the only dependency
-npm start       # node server.js -> http://localhost:3000
+npm start       # node start.js -> http://localhost:3000
 ```
 
 ```sh
@@ -41,23 +41,22 @@ Env vars: `PORT` (default 3000), `PLANNER_DB` (default `./planner.db`, gitignore
 
 Tests import from `public/dates.js` directly (`tests/helpers.js`), addressing slots by the label the app really renders. A change to the date helpers therefore shows up as a test failure rather than as silent drift. Every test creates its own event, so they run fully parallel without interfering.
 
-`tests/api.spec.js` runs without a browser page — a failure there points at `server.js` or `db.js`, not the front end.
+`tests/api.spec.js` runs without a browser page — a failure there points at `app.js` or `db.js`, not the front end.
 
-**The suite runs automatically.** `.claude/settings.json` wires two hooks to `scripts/run-tests-hook.sh`: a `PostToolUse` hook runs it after any edit to a file the tests cover (`public/**`, `server.js`, `db.js`, `tests/**`, `playwright.config.js`), and a `Stop` hook re-runs it at the end of a turn if any edit since the last green run has gone unchecked — tracked by the `.test-pending` marker file. A failure exits 2, which feeds the output back rather than failing quietly.
+**The suite runs automatically.** `.claude/settings.json` wires two hooks to `scripts/run-tests-hook.sh`: a `PostToolUse` hook runs it after any edit to a file the tests cover (`public/**`, `app.js`, `start.js`, `db.js`, `tests/**`, `playwright.config.js`), and a `Stop` hook re-runs it at the end of a turn if any edit since the last green run has gone unchecked — tracked by the `.test-pending` marker file. A failure exits 2, which feeds the output back rather than failing quietly.
 
 ## Architecture
 
 Three-layer, no framework beyond Express:
 
 - `app.js` — Express 5 API + static host for `public/`, exported **without a listener**. All validation lives here (`requireString`, `requireEvent`, `cleanSlots`) and throws `HttpError`, which the single error middleware turns into `{"error": "..."}` at the right status. Pages display that message verbatim, so error strings are user-facing copy.
-- `server.js` — imports `app.js` and calls `listen`. The only file that binds a port, and the one `npm start` runs.
-- `api/index.js` — re-exports the same app for Vercel, which invokes a function per request. Nothing may listen there, which is the whole reason the app and the listener are separate files.
+- `start.js` — imports `app.js` and calls `listen`. The only file that binds a port, and the one `npm start` runs. **Do not rename it to `server.js`**: Vercel treats a root `app.js`, `index.js` or `server.js` as a candidate Express entry point, and having two leaves the choice to chance.
 - `db.js` — `createStore({ url, authToken })` returns the whole storage API over libSQL. Every method is **async**. The connection and the schema are created lazily and memoised, so importing the module is free and the schema statements run once per process rather than once per request.
 - `public/` — three plain HTML pages (`index` create, `event` pick, `results` view), each with an inline `<script type="module">`, sharing `common.js` and `dates.js`.
 
 ### The two invariants worth knowing
 
-**`public/dates.js` is imported by both the browser and `server.js`.** That is deliberate: server and grid can never disagree about which days an event covers, or about `PARTS` / `MAX_RANGE_DAYS` / `validateRange`. Keep it free of DOM and Node APIs. All date maths is on `'YYYY-MM-DD'` strings through `Date.UTC`/`getUTC*` — never `new Date('2026-08-20')` read back in local time, which shifts a day in a UK summer.
+**`public/dates.js` is imported by both the browser and `app.js`.** That is deliberate: server and grid can never disagree about which days an event covers, or about `PARTS` / `MAX_RANGE_DAYS` / `validateRange`. Keep it free of DOM and Node APIs. All date maths is on `'YYYY-MM-DD'` strings through `Date.UTC`/`getUTC*` — never `new Date('2026-08-20')` read back in local time, which shifts a day in a UK summer.
 
 **List view and month view both drive one `renderCell(cell, date, part, { compact })` callback.** `renderCalendar` in `common.js` picks the layout; each page supplies the callback (`makeCell` in `event.html` / `results.html`). Adding behaviour to a slot means editing that one callback, not two renderers. `compact: true` means the month view's narrow strip — room for an initial and a count only, so names go in a `title` tooltip there.
 
@@ -78,6 +77,10 @@ libSQL is SQLite that can also be reached over a network, which is what makes Ve
 `db.js` picks its client from the URL — the default build for `file:` (it can open a local file but carries native bindings) and `@libsql/client/web` otherwise (pure JS over HTTP, so no native code lands in a serverless bundle). Paths are resolved to absolute before going into the `file:` URL; on Windows a relative path is not a valid URL body.
 
 Two things to preserve when touching `db.js`: `lastInsertRowid` comes back as a **bigint**, so it needs `Number()`; and libSQL rows are array-like with column names attached, so they must be spread into plain objects (`toPlain`) or `res.json()` emits arrays instead of objects. `saveResponse` deletes a person's slots explicitly rather than trusting `ON DELETE CASCADE` — the cascade is still declared, but foreign-key enforcement is a per-connection property and the explicit delete does not depend on it.
+
+`connect()` memoises the connection promise but **must not memoise a failure**. Serverless instances are long lived, so caching a rejected promise would fail every later request on that instance; the `.catch` that clears the memo is what lets the next request retry.
+
+Vercel deploys this with zero configuration — `vercel.json` only names the framework. It detects the root `app.js`, makes the whole Express app one function, and serves `public/**` from the CDN. Two consequences: `express.static` is **ignored** on Vercel (it stays for local use only), and static files win over the function because the filesystem is checked first, so no rewrite rules are needed. Production needs `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` set, or the app falls back to a `file:` URL and dies on the read-only filesystem.
 
 ### Data model
 

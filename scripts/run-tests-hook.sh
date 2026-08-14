@@ -39,7 +39,7 @@ read_file_path() {
 # The files the suite can actually say anything about.
 covers() {
   case "$1" in
-    *public/*|*/server.js|*/db.js|*tests/*|*playwright.config.js) return 0 ;;
+    *public/*|*/app.js|*/start.js|*/db.js|*tests/*|*playwright.config.js) return 0 ;;
     *) return 1 ;;
   esac
 }

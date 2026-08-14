@@ -1,7 +1,9 @@
 // Local entry point: bind the app to a port. `npm start` runs this.
 //
-// Vercel never loads this file — it invokes api/index.js per request, where
-// listening on a port is neither possible nor wanted.
+// Deliberately not called server.js. Vercel treats app.js, index.js and
+// server.js at the root as candidate Express entry points, and having two of
+// them leaves which one it picks to chance. This name is not on that list, so
+// app.js is unambiguously the one that gets deployed.
 
 import app from './app.js';
 

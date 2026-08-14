@@ -1,7 +1,9 @@
 // The Express app, with no listener attached.
 //
-// server.js binds it to a port for local use; api/index.js hands the same app
-// to Vercel, where a function is invoked per request and nothing may listen.
+// This file is also the Vercel entry point: Vercel looks for an app.js at the
+// root exporting an Express app and turns it into a single function. That is
+// why the listener lives in start.js — and why start.js is named so that it
+// stays off Vercel's list of candidate entry points.
 
 import express from 'express';
 import path from 'node:path';

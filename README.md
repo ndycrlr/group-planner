@@ -15,7 +15,7 @@ npm start
 Then open <http://localhost:3000>.
 
 Needs **Node 20 or newer**. Storage is SQLite through libSQL, which reads a plain local
-file by default — `planner.db`, created next to `server.js` on first run — and can also
+file by default — `planner.db`, created in the project root on first run — and can also
 talk to a hosted database over the network without any change to the schema.
 
 | Variable | Default | Purpose |
@@ -95,11 +95,13 @@ Replies would go missing between instances. So production needs a hosted databas
 1. Create a database at [Turso](https://turso.tech) and note its URL and auth token.
 2. Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the Vercel project's environment
    variables. The schema creates itself on first request.
-3. Deploy. `vercel.json` sends `/api/*` to the Express app in `api/index.js`; everything
-   in `public/` is served straight from the CDN.
+3. Deploy — connect the repository at [vercel.com/new](https://vercel.com/new), or run
+   `npx vercel deploy`.
 
-No other host-specific work is needed — `app.js` holds the app with no listener, and
-`server.js` only exists to bind a port locally.
+There is nothing else to configure. Vercel detects Express, turns the app exported from
+`app.js` into a single function, and serves `public/` from its CDN. `start.js` exists only
+to bind a port locally; it is named so that it stays off Vercel's list of candidate entry
+points, which includes `server.js`.
 
 There are no accounts and no passwords: anyone who has an event link can see and change
 that event's responses, so treat the link as semi-private.
@@ -108,8 +110,7 @@ that event's responses, so treat the link as semi-private.
 
 ```
 app.js             Express API + serves public/, with no listener attached
-server.js          binds app.js to a port for local use
-api/index.js       the same app, as a Vercel function
+start.js           binds app.js to a port for local use
 db.js              SQLite schema and queries, over libSQL
 public/
   index.html       create an event
@@ -120,7 +121,7 @@ public/
   styles.css       styling, light and dark
 ```
 
-`public/dates.js` is deliberately imported by both `server.js` and the browser pages, so
+`public/dates.js` is deliberately imported by both `app.js` and the browser pages, so
 the two can never disagree about which days an event covers. All date maths runs in UTC
 on `YYYY-MM-DD` strings, which avoids `new Date('2026-08-20')` silently shifting a day
 backwards in a UK summer.

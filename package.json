@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Collect group availability across a range of days, split into morning / afternoon / evening.",
-  "main": "server.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node start.js",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",

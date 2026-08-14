@@ -1,6 +1,6 @@
 // Pure date helpers with no DOM or Node dependencies.
 //
-// This file is imported by BOTH the browser pages and server.js, so the two can
+// This file is imported by BOTH the browser pages and app.js, so the two can
 // never disagree about which days an event covers.
 //
 // Every date is a plain 'YYYY-MM-DD' string. All arithmetic goes through UTC

@@ -1,5 +1,5 @@
 // The API contract the pages depend on. These run without a browser page, so a
-// failure here points at server.js or db.js rather than at the front end.
+// failure here points at app.js or db.js rather than at the front end.
 
 import { test, expect } from '@playwright/test';
 import { PARTS, datesInRange, MAX_RANGE_DAYS } from '../public/dates.js';

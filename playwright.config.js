@@ -36,7 +36,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'node server.js',
+    command: 'node start.js',
     url: `http://localhost:${PORT}/index.html`,
     env: { PORT: String(PORT), PLANNER_DB: DB_FILE },
     // Never adopt a server someone else started: it would be pointed at the
