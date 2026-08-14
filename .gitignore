@@ -1,4 +1,9 @@
 node_modules/
+
+# Claude Code checks worktrees out in here. Each one is a full working copy of
+# this repo, so tracking it would commit the repository into itself.
+.claude/worktrees/
+
 *.db
 *.db-journal
 *.db-wal
