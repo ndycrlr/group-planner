@@ -214,6 +214,7 @@ h1 {
 }
 
 input[type="text"],
+input[type="email"],
 input[type="date"] {
   width: 100%;
   max-width: 24rem;
@@ -226,6 +227,7 @@ input[type="date"] {
 }
 
 input[type="text"]:hover,
+input[type="email"]:hover,
 input[type="date"]:hover {
   border-color: var(--muted);
 }
@@ -665,10 +667,21 @@ button.pick.strip {
 }
 
 .people li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
   padding: 0.25rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 999px;
   font-size: 0.85rem;
+}
+
+/* The name is who they are; the address is only there to separate two people
+ * who share one, so it is set quieter and smaller rather than competing. */
+.person-email {
+  color: var(--muted);
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
 }
 
 #best {

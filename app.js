@@ -18,6 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 const MAX_TITLE_LENGTH = 100;
 const MAX_NAME_LENGTH = 50;
+const MAX_EMAIL_LENGTH = 254; // the longest an address is allowed to be, per RFC 5321
 
 /**
  * Turso in production; a local SQLite file otherwise. The path is resolved
@@ -59,6 +60,22 @@ function requireString(value, field, maxLength) {
     throw new HttpError(400, `${field} must be ${maxLength} characters or fewer.`);
   }
   return text;
+}
+
+/**
+ * Deliberately a shape check and nothing more: one @, something either side, a
+ * dot in the domain, no spaces. The address is an identifier here, never a
+ * destination — nothing is sent to it — so rejecting an unusual but legitimate
+ * address would cost a real person their place for no gain.
+ */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+
+function requireEmail(value) {
+  const email = requireString(value, 'Your email', MAX_EMAIL_LENGTH).toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) {
+    throw new HttpError(400, 'That does not look like an email address.');
+  }
+  return email;
 }
 
 async function requireEvent(id) {
@@ -117,10 +134,11 @@ app.get('/api/events/:id', async (req, res) => {
 app.post('/api/events/:id/responses', async (req, res) => {
   const event = await requireEvent(req.params.id);
   const name = requireString(req.body?.name, 'Your name', MAX_NAME_LENGTH);
+  const email = requireEmail(req.body?.email);
   const slots = cleanSlots(event, req.body?.slots);
 
-  await store.saveResponse(event.id, name, slots);
-  res.json({ ok: true, name, saved: slots.length });
+  await store.saveResponse(event.id, name, email, slots);
+  res.json({ ok: true, name, email, saved: slots.length });
 });
 
 app.get('/api/events/:id/results', async (req, res) => {
@@ -133,8 +151,10 @@ app.get('/api/events/:id/results', async (req, res) => {
   for (const date of datesInRange(event.startDate, event.endDate)) {
     grid[date] = Object.fromEntries(PARTS.map((part) => [part, []]));
   }
-  for (const { name, date, part } of slots) {
-    grid[date]?.[part]?.push(name);
+  // Each entry is the person, not just their name: with three Andys in a slot
+  // the names alone would read as one person listed three times.
+  for (const { name, email, date, part } of slots) {
+    grid[date]?.[part]?.push({ name, email });
   }
 
   res.json({ event, participants, grid });

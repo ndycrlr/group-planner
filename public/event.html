@@ -21,10 +21,21 @@
   <div id="error" class="notice error" hidden></div>
 
   <section class="card" id="form" hidden>
-    <label class="field">
-      <span>Your name</span>
-      <input id="name" type="text" maxlength="50" autocomplete="name" placeholder="e.g. Andy">
-    </label>
+    <div class="row">
+      <label class="field">
+        <span>Your name</span>
+        <input id="name" type="text" maxlength="50" autocomplete="name" placeholder="e.g. Andy">
+      </label>
+      <label class="field">
+        <span>Your email</span>
+        <input id="email" type="email" maxlength="254" autocomplete="email"
+               placeholder="e.g. andy@example.com">
+      </label>
+    </div>
+    <p class="hint">
+      Your email is what tells you apart from anyone else called the same thing. It shows on
+      the results page; nothing is ever sent to it.
+    </p>
 
     <div class="grid-head">
       <p class="hint">
@@ -57,6 +68,7 @@ const eventId = qs('id');
 const errorBox = document.getElementById('error');
 const form = document.getElementById('form');
 const nameInput = document.getElementById('name');
+const emailInput = document.getElementById('email');
 const status = document.getElementById('status');
 const submitButton = document.getElementById('submit');
 
@@ -64,6 +76,7 @@ const selected = new Set();          // 'YYYY-MM-DD|part'
 const buttons = new Map();           // same key -> its toggle button, current view only
 const selectionKey = `planner:selection:${eventId}`;
 const NAME_KEY = 'planner:name';
+const EMAIL_KEY = 'planner:email';
 const PART_INITIALS = { morning: 'M', afternoon: 'A', evening: 'E' };
 
 let currentEvent = null;
@@ -236,6 +249,7 @@ async function main() {
 
   form.hidden = false;
   nameInput.value = localStorage.getItem(NAME_KEY) ?? '';
+  emailInput.value = localStorage.getItem(EMAIL_KEY) ?? '';
   nameInput.focus();
 }
 
@@ -252,6 +266,13 @@ submitButton.addEventListener('click', async () => {
     return;
   }
 
+  const email = emailInput.value.trim();
+  if (!email) {
+    setStatus('Please add your email — it is what tells two people with the same name apart.', true);
+    emailInput.focus();
+    return;
+  }
+
   const slots = [...selected].map((key) => {
     const [date, part] = key.split('|');
     return { date, part };
@@ -263,9 +284,10 @@ submitButton.addEventListener('click', async () => {
   try {
     await api(`/api/events/${encodeURIComponent(eventId)}/responses`, {
       method: 'POST',
-      body: JSON.stringify({ name, slots }),
+      body: JSON.stringify({ name, email, slots }),
     });
     localStorage.setItem(NAME_KEY, name);
+    localStorage.setItem(EMAIL_KEY, email);
     setStatus(
       slots.length === 0
         ? `Saved — noted that you can't make any of these, ${name}.`

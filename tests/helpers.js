@@ -20,13 +20,32 @@ export async function createEvent(request, overrides = {}) {
   return { id, ...body };
 }
 
+/**
+ * An address derived from a name, so a test that does not care about identity
+ * does not have to invent one. Two submissions under the same name land on the
+ * same address and so count as the same person, which is what most tests mean
+ * by using a name twice — pass `email` explicitly to get two distinct people.
+ */
+export function emailFor(name) {
+  return `${name.trim().toLowerCase().replace(/\s+/g, '.')}@example.test`;
+}
+
 /** Record one person's availability. `slots` is [[date, part], …]. */
-export async function submitResponse(request, id, name, slots) {
+export async function submitResponse(request, id, name, slots, email = emailFor(name)) {
   const response = await request.post(`/api/events/${id}/responses`, {
-    data: { name, slots: slots.map(([date, part]) => ({ date, part })) },
+    data: { name, email, slots: slots.map(([date, part]) => ({ date, part })) },
   });
   expect(response.ok(), await response.text()).toBeTruthy();
   return response.json();
+}
+
+/**
+ * Just the names, in order, from a list of people — either the `participants`
+ * of a results payload or one slot of its grid. Both are lists of
+ * `{ name, email }` now that a name no longer identifies anyone on its own.
+ */
+export function namesOf(people) {
+  return people.map((person) => person.name);
 }
 
 /** The aria-label event.html gives a slot button, e.g. 'Mon 17 Aug Morning'. */

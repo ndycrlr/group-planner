@@ -112,6 +112,8 @@ Tests import from `public/dates.js` directly (`tests/helpers.js`), addressing sl
 
 `tests/mobile.spec.js` is the only file that overrides the viewport (`test.use`), pinning it to 320px. The layout bugs it covers were all invisible at the default desktop size, so a change to `styles.css` that looks fine in the other specs can still fail here.
 
+`tests/migration.spec.js` is the only file that talks to `db.js` directly, with no server and no page. It has to: it builds a pre-email database by hand to check the upgrade path, and by the time the test server is up its own database is already current.
+
 **The suite runs automatically.** `.claude/settings.json` wires two hooks to `scripts/run-tests-hook.sh`: a `PostToolUse` hook runs it after any edit to a file the tests cover (`public/**`, `app.js`, `start.js`, `db.js`, `tests/**`, `playwright.config.js`), and a `Stop` hook re-runs it at the end of a turn if any edit since the last green run has gone unchecked — tracked by the `.test-pending` marker file. A failure exits 2, which feeds the output back rather than failing quietly.
 
 ## Architecture
@@ -170,9 +172,15 @@ Vercel deploys this with zero configuration — `vercel.json` only names the fra
 
 ### Data model
 
-`events` → `responses` (one per person per event) → `slots` (one row per date+part). `responses.name` is `COLLATE NOCASE` with `UNIQUE(event_id, name)`, so re-submitting as "andy" replaces "Andy". `saveResponse` implements that upsert as delete-then-insert inside a transaction; the old slots go with it via `ON DELETE CASCADE`.
+`events` → `responses` (one per person per event) → `slots` (one row per date+part).
 
-`GET /results` returns a **dense** grid: every date in range × every part, empty slots as empty arrays. Pages can index `grid[date][part]` without gap-filling — preserve that if you touch the endpoint.
+**A person is their email, not their name.** `responses.email` is `COLLATE NOCASE` with `UNIQUE(event_id, email)`, so re-submitting from the same address replaces that answer while three people called Andy stay three people — which is the whole reason the column exists. Do not put a uniqueness constraint back on `name`. `saveResponse` implements the upsert as delete-then-insert inside a transaction; the old slots go with it via `ON DELETE CASCADE`.
+
+`email` is nullable **only** for rows written before the column existed. Every route requires one, and SQLite counts NULLs as distinct in a UNIQUE index, so those legacy rows coexist happily; `saveResponse` matches `email = ? OR (email IS NULL AND name = ?)` so such a person is adopted rather than duplicated the first time they answer again.
+
+`migrate()` in `db.js` rebuilds the table for databases that predate the column, because `CREATE TABLE IF NOT EXISTS` leaves the old `UNIQUE(event_id, name)` in place and SQLite cannot drop an inline constraint. Two things there are load-bearing: row ids are carried across, since `slots.response_id` points at them; and foreign keys are switched **off** around the rebuild, because `DROP TABLE` does an implicit `DELETE FROM` first and `slots` cascades — with them on, the migration deletes every answer it is supposed to be preserving. `tests/migration.spec.js` builds the old schema by hand and covers exactly this.
+
+`GET /results` returns a **dense** grid: every date in range × every part, empty slots as empty arrays. Each entry is a `{ name, email }` object rather than a bare name, for the same reason — preserve both if you touch the endpoint. Pages can index `grid[date][part]` without gap-filling.
 
 Event ids are 6 random bytes as base64url. There are no accounts: anyone with the link can read and write that event. Treat the link as the only access control.
 
