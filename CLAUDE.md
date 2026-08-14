@@ -13,8 +13,22 @@ If work has already begun in the working tree on `main`, `git checkout -b` carri
 uncommitted changes onto the new branch — move them there before committing rather than
 committing to `main` and fixing it afterwards.
 
-Merge back with `--ff-only` where history is linear, which keeps every commit on `main`
-conventional and avoids a non-conventional merge commit.
+**Never merge into `main` locally either.** Work reaches `main` through a pull request and
+nothing else — no `git merge` into `main`, no `git push` to `main`. That is what gives the
+review something to run on: `.github/workflows/claude-review.yml` fires when a PR is opened
+(also on reopen and on a draft marked ready), and a direct push arrives after the only
+moment anything would have looked at it.
+
+The review reads the diff **as it was when the PR opened**. Pushing fixes afterwards does not
+re-run it — `synchronize` is deliberately not in the trigger list, since a review per push is
+mostly a review of the same code again. `gh pr close <n> && gh pr reopen <n>` re-runs it when
+the fixes are worth a second look.
+
+`.githooks/pre-push` refuses a push to `main` so the rule does not depend on remembering it.
+It is a guardrail rather than a lock — this repository is private on a free plan, where
+branch protection and rulesets are unavailable, so the check has to live on this side of the
+wire and `ALLOW_PUSH_MAIN=1 git push` goes through it. Reach for that only when the alternative
+is worse.
 
 **Delete the branch once it is merged — local and remote both.** A branch is a piece of
 work in flight; leaving merged ones lying about turns `git branch -a` into a list that no
@@ -22,19 +36,45 @@ longer tells you what is actually outstanding, which is the one question it exis
 answer.
 
 ```sh
+git push -u origin <type>/<short-name>
+gh pr create --fill                     # opening it starts the review
+# ... read the review, push fixes to the same branch ...
+gh pr merge --squash --delete-branch    # deletes the remote branch with it
 git checkout main
-git merge --ff-only <type>/<short-name>
-git push                                        # main, with the merged work on it
-git branch -d <type>/<short-name>               # local
-git push origin --delete <type>/<short-name>    # remote
+git pull
+git fetch --prune                       # clears the stale remote-tracking ref
+git branch -D <type>/<short-name>       # local; -D, and see below for why
 ```
 
-Use `-d`, never `-D`. `-d` refuses to delete a branch whose commits are not reachable from
-where you are, so it is the check that the merge really landed — reach for `-D` and you can
-throw the work away silently. If it refuses, the merge is what needs looking at, not the
-flag. Where the merge happened through a GitHub PR, deleting on the remote may already have
-been done for you; `git fetch --prune` then clears the stale remote-tracking refs, and the
-local branch is still yours to delete.
+**Squashing makes the PR title the commit subject**, so the title has to be a Conventional
+Commit in its own right. GitHub squashes server-side, where `.githooks/commit-msg` cannot
+run: this is the one place in the repository where nothing checks the wording for you.
+`--fill` takes the title from the single commit on a one-commit branch, which is usually the
+right answer; pass `--title` when the branch has several.
+
+The review needs a `CLAUDE_CODE_OAUTH_TOKEN` repository secret — `claude setup-token`, then
+`gh secret set CLAUDE_CODE_OAUTH_TOKEN`, and set it from a real terminal so the paste is
+masked and the token stays out of the shell history. It bills to the Claude subscription;
+an `ANTHROPIC_API_KEY` works just as well in its place, against prepaid API credits, and
+the workflow names the one line that changes. Without a credential the run fails on the PR's
+checks rather than skipping silently, which is the intended way round — a review that
+quietly did not happen is worse than a red tick.
+
+`--delete-branch` handles the remote, and `git fetch --prune` clears the stale
+remote-tracking ref it leaves behind. The local branch is still yours to delete, and this is
+the one place where **`-d` will refuse and `-D` is right**: squashing writes a *new* commit,
+so the branch's own commits are never reachable from `main` and `-d`'s reachability check
+reports work that has in fact landed as unmerged. Ask GitHub instead of git — it is the one
+that did the merge:
+
+```sh
+gh pr view <type>/<short-name> --json state,mergedAt   # expect "MERGED"
+git branch -D <type>/<short-name>
+```
+
+That check is not ceremony. `-D` deletes whatever you point it at without comment, so
+something has to stand in for the safety `-d` was giving you, and the merged PR is the only
+thing that still knows.
 
 If deleting fails because the branch is checked out in a worktree, remove the worktree
 first (`git worktree remove <path>`) — a branch checked out anywhere cannot be deleted.
