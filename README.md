@@ -69,12 +69,22 @@ Both the availability page and the results page can be shown two ways, switched 
 - **List** — a row per day, columns for morning / afternoon / evening. Best for a week.
 - **Month** — a proper calendar grid, one block per month stacked vertically with no
   paging. Days outside the event's range are greyed out. Each day holds three strips
-  (M / A / E); on the results page each strip shows just a count (`3/4`) and reveals the
-  names in a tooltip on hover. Hover needs a mouse, so on a phone use list view to read
-  the names.
+  (M / A / E).
+
+On the results page a slot shows only its count (`3/4`), in both views, and gives up the
+names in a tooltip on hover. The grid is there to be scanned for the slots that work — a
+name under every cell buried that — so who is free is a follow-up question, asked one slot
+at a time. Hovering needs a mouse: on a phone, read the counts and use the "who replied"
+list at the top of the page.
 
 A page opens in whichever view suits the length — list for **7 days or fewer**, month
 beyond that — and once you use the toggle your choice is remembered for next time.
+
+On a phone both views rearrange themselves to fit the screen rather than scrolling
+sideways: the list stops being a table and gives each day its own block with the three
+slots in a row underneath, and the month shrinks its days so all seven columns fit. Either
+way the page only ever scrolls downwards. The month is an overview at that size — for
+anything fiddly, and to read the names, switch to list view.
 
 Anyone with the link can both submit and view results. Submitting again with the same
 name **updates** that person's answer rather than adding them twice — names are matched
@@ -118,7 +128,7 @@ public/
   results.html     who is free when
   dates.js         date helpers shared by the browser AND the server
   common.js        API wrapper + the list and month renderers, view toggle
-  styles.css       styling, light and dark
+  styles.css       styling, light and dark, and the narrow-screen layouts
 ```
 
 `public/dates.js` is deliberately imported by both `app.js` and the browser pages, so
@@ -128,6 +138,8 @@ backwards in a UK summer.
 
 Both views in `common.js` drive the same `renderCell(cell, date, part, { compact })`
 callback, so the availability logic on each page is written once and rendered two ways.
+The narrow-screen layouts are CSS alone — same markup, same callback — so a phone and a
+desktop can never drift apart in what they show.
 
 ## API
 

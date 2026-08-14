@@ -136,8 +136,10 @@ async function load() {
 }
 
 /**
- * Fill one slot. In month view the cell is a narrow strip with only room for
- * the count, so the names live in the tooltip. List view shows them outright.
+ * Fill one slot. Every cell shows its count and keeps the names in a tooltip,
+ * in both views: the grid is read by scanning it for the bright cells, and a
+ * name under every one of them buried that. Who is free is the follow-up
+ * question, asked one slot at a time.
  */
 function makeCell(cell, date, part, { compact }) {
   const total = data.participants.length;
@@ -169,14 +171,8 @@ function makeCell(cell, date, part, { compact }) {
       el('span', { className: 'count', textContent: `${names.length}/${total}${tick}` }),
     );
 
-    if (compact) {
-      box.title = `${formatDay(date)} ${PART_LABELS[part].toLowerCase()} — ${names.join(', ')}`;
-      box.classList.add('has-names');
-    } else {
-      box.append(
-        el('ul', { className: 'names' }, names.map((name) => el('li', { textContent: name }))),
-      );
-    }
+    box.title = `${formatDay(date)} ${PART_LABELS[part].toLowerCase()} — ${names.join(', ')}`;
+    box.classList.add('has-names');
   }
 
   cell.append(box);

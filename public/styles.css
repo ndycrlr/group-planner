@@ -397,7 +397,7 @@ td.slot {
   vertical-align: top;
   width: 28%;
   /* A nominal height lets the cell inside resolve height:100% against the row,
-   * so a day with one long list of names doesn't leave its neighbours stumpy. */
+   * so every slot in a day matches the tallest of them. */
   height: 1px;
 }
 
@@ -413,7 +413,13 @@ button.pick {
   color: var(--muted);
   font-size: 0.85rem;
   font-weight: 500;
-  touch-action: none; /* let drag-to-paint work without the page scrolling */
+  /* Mouse drag-to-paint is unaffected by touch-action, so this only governs
+   * touch — where a run of slots is painted by tapping them anyway, because a
+   * touch pointer stays captured by the button it started on and never fires
+   * pointerenter on its neighbours. `none` therefore bought nothing on a phone
+   * and cost the page its scroll: a full-width grid of slots left nowhere to
+   * put a thumb. `pan-y` keeps the page scrolling under the grid. */
+  touch-action: pan-y;
   user-select: none;
   transition: background-color 100ms ease, color 100ms ease;
 }
@@ -436,9 +442,13 @@ button.pick[aria-pressed="true"] {
 
 .cell {
   --lit: 0;
-  min-height: 3.4rem;
+  /* Only a count goes in here, so the box is sized to be a comfortable target
+   * and a readable block of colour rather than to hold a list of names. */
+  min-height: 2.6rem;
   height: 100%;
-  padding: 0.55rem 0.6rem;
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: color-mix(in oklab, var(--hue) calc(var(--lit) * var(--lit-max)), transparent);
@@ -446,28 +456,19 @@ button.pick[aria-pressed="true"] {
 
 .cell.all-available {
   border: 2px solid var(--hue);
-  padding: calc(0.55rem - 1px) calc(0.6rem - 1px);
+  padding: calc(0.45rem - 1px) calc(0.6rem - 1px);
 }
 
 .cell .count {
-  display: block;
-  margin-bottom: 0.3rem;
-  font-size: 0.72rem;
+  font-size: 0.85rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   color: var(--muted);
 }
 
 .cell.all-available .count {
   color: var(--ink);
-}
-
-.cell ul.names {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  font-size: 0.9rem;
 }
 
 .cell .none {
@@ -639,8 +640,9 @@ button.pick.strip {
   font-size: 0.72rem;
 }
 
-/* Names are in the tooltip, so hint that the strip is worth hovering. */
-.cell.strip.has-names {
+/* Names are in the tooltip in both views, so hint that a filled cell is worth
+ * hovering. Only a cell that has names to give gets the cursor. */
+.cell.has-names {
   cursor: help;
 }
 
@@ -702,6 +704,210 @@ button.pick.strip {
   font-size: 0.88rem;
 }
 
+/* --- Narrow screens ------------------------------------------------------ */
+/* A phone in portrait is 320–390 CSS px across — 320 on an iPhone SE, or on any
+ * iPhone with Display Zoom turned on. The list table's 34rem minimum and the
+ * month's 40rem did not come close to fitting, so both scrolled sideways inside
+ * the card: the Evening column simply never appeared, and nothing on screen
+ * said it was there. Neither grid scrolls sideways any more.
+ *
+ * The two breakpoints below are each set where that grid plus the body and card
+ * padding around it stops fitting — 34rem + 7rem for the table, 40rem + 7rem for
+ * the month — rather than at a device size. They differ because the grids do. */
+
+@media (max-width: 44rem) {
+  /* The table stops behaving as a table: each day becomes a block, and its
+   * three slots are a row inside that block. Same DOM, same renderCell — only
+   * the layout changes, so the two views stay in step with the desktop ones. */
+  table.grid,
+  table.grid tbody,
+  table.grid tr,
+  table.grid th,
+  table.grid td {
+    display: block;
+    min-width: 0;
+  }
+
+  table.grid {
+    border-spacing: 0;
+  }
+
+  /* Column headings only mean something over columns. Every slot names its own
+   * part of the day, and the three keep their order and their hue, so nothing
+   * is lost with the heading row gone. */
+  table.grid thead {
+    display: none;
+  }
+
+  table.grid tbody tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+    margin-bottom: 0.9rem;
+  }
+
+  /* The day owns the full width above its own slots. */
+  table.grid tbody tr th.day {
+    grid-column: 1 / -1;
+    padding: 0 0 0.3rem 0.15rem;
+  }
+
+  /* Stacked in the desktop day column, one line here: 'Mon 17 Aug'. */
+  th.day .dow {
+    display: inline;
+    margin-right: 0.4rem;
+  }
+
+  th.day .dom {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  td.slot {
+    width: auto;
+    height: auto;
+  }
+
+  /* With the heading row gone, an empty results cell would be a dash in a
+   * faintly tinted box — hue left as the only thing saying which part of the
+   * day it is. The label puts it back in words. The picking page needs none of
+   * this: its buttons are named already, which is why this is scoped to cells. */
+  td.slot:has(> .cell) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  td.slot:has(> .cell)::before {
+    content: attr(data-part);
+    padding-left: 0.15rem;
+    font-size: 0.56rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--hue);
+  }
+
+  td.slot > .cell {
+    flex: 1;
+  }
+
+  /* Three across at 320px leaves ~78px a slot, so the longest label
+   * ('Afternoon', and '✓ Available' once picked) needs to come down a step. */
+  button.pick {
+    min-height: 3rem;
+    padding: 0.4rem 0.2rem;
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .cell {
+    justify-content: center;
+    min-height: 2.6rem;
+    padding: 0.45rem 0.3rem;
+  }
+
+  .cell.all-available {
+    padding: calc(0.45rem - 1px) calc(0.3rem - 1px);
+  }
+
+  /* --- Chrome around the grids ------------------------------------------- */
+
+  .grid-head {
+    gap: 0.6rem;
+  }
+
+  /* A thumb-sized segmented control rather than a desktop-sized one. */
+  button.view-button {
+    padding: 0.45rem 1.1rem;
+  }
+
+  /* The main action is worth the full width; the rest sit under it. */
+  .actions {
+    margin-top: 1.25rem;
+    gap: 0.6rem;
+  }
+
+  .actions button.primary {
+    flex: 1 1 100%;
+    padding: 0.8rem 1.05rem;
+  }
+
+  .spacer {
+    display: none;
+  }
+
+  .share input {
+    flex-basis: 100%;
+  }
+}
+
+/* The month has seven columns to place rather than three, so it runs out of
+ * room later than the list does and gets its own, wider breakpoint. Everything
+ * inside a day is sized in vw between here and 320px: one step down would be
+ * either too cramped at the bottom of the range or too dinky at the top. The
+ * month becomes an overview at these widths — the list view is a tap away for
+ * anything fiddly — but it fits, and it only ever scrolls downwards. */
+
+@media (max-width: 48rem) {
+  .month {
+    min-width: 0;
+  }
+
+  .month-grid {
+    gap: 3px;
+  }
+
+  .dow-head {
+    padding: 0.2rem 0;
+    font-size: clamp(0.56rem, 1.8vw, 0.68rem);
+    letter-spacing: 0.02em;
+    text-align: center;
+  }
+
+  .day-cell {
+    min-height: 0;
+    gap: 2px;
+    padding: 0.2rem 0.15rem;
+    border-radius: 6px;
+  }
+
+  .day-num {
+    padding-left: 0;
+    text-align: center;
+    font-size: clamp(0.66rem, 2vw, 0.78rem);
+  }
+
+  button.pick.strip {
+    /* Small, but still a deliberate tap rather than a hairline. */
+    min-height: 1.7rem;
+    padding: 0.1rem;
+    font-size: clamp(0.6rem, 1.9vw, 0.72rem);
+    text-align: center;
+  }
+
+  /* A flex item defaults to min-height:auto, so the one strip whose count wraps
+   * ('5/5 ✓') would grow past its third of the day and shove the other two out
+   * of line with the days either side. Zeroing it keeps every day's three
+   * strips the same height, wrapped or not. */
+  .strip-wrap {
+    min-height: 0;
+  }
+
+  .cell.strip {
+    justify-content: center;
+    gap: 0.15rem;
+    padding: 0.15rem 0.1rem;
+    line-height: 1.2;
+  }
+
+  .cell.strip .part,
+  .cell.strip .count,
+  .cell.strip .none {
+    font-size: clamp(0.58rem, 1.9vw, 0.72rem);
+  }
+}
+
 @media (max-width: 30rem) {
   body {
     padding: 1.25rem 0.9rem 4rem;
@@ -709,6 +915,11 @@ button.pick.strip {
 
   .card {
     padding: 1.1rem;
+  }
+
+  /* Every pixel the card gives back is a pixel the seven month columns get. */
+  #grid {
+    margin-inline: -0.45rem;
   }
 }
 
