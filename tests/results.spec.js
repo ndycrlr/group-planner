@@ -50,7 +50,13 @@ test('lists everyone who replied', async ({ page, request }) => {
   await page.goto(`/results.html?id=${id}`);
 
   await expect(page.locator('#peopleCount')).toHaveText('3 people have replied');
-  await expect(page.locator('#people li')).toHaveText(['Andy', 'Priya', 'Tom']);
+  await expect(page.locator('#people .person-name')).toHaveText(['Andy', 'Priya', 'Tom']);
+  // The address is shown beside the name — it is what separates two Andys.
+  await expect(page.locator('#people .person-email')).toHaveText([
+    'andy@example.test',
+    'priya@example.test',
+    'tom@example.test',
+  ]);
 });
 
 test('shows the count in each slot, and the names on hover', async ({ page, request }) => {

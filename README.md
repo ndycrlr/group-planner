@@ -87,8 +87,13 @@ way the page only ever scrolls downwards. The month is an overview at that size 
 anything fiddly, and to read the names, switch to list view.
 
 Anyone with the link can both submit and view results. Submitting again with the same
-name **updates** that person's answer rather than adding them twice — names are matched
-case-insensitively, so `andy` and `Andy` are the same person.
+**email** updates that person's answer rather than adding them twice; addresses are matched
+case-insensitively, so `Andy@…` and `andy@…` are the same person.
+
+The email is there because names are not unique — plenty of groups have three people called
+Andy, and keying on the name meant each one quietly overwrote the last. Nothing is sent to
+the address; it identifies a person and nothing more. It is shown beside their name on the
+results page, and in a slot's tooltip only when someone else there shares that name.
 
 ## Sharing beyond your own machine
 
@@ -147,8 +152,8 @@ desktop can never drift apart in what they show.
 |---|---|---|
 | `POST` | `/api/events` | `{title, startDate, endDate}` → `{id}` |
 | `GET` | `/api/events/:id` | Event title and date range |
-| `POST` | `/api/events/:id/responses` | `{name, slots:[{date, part}]}` — upserts by name |
-| `GET` | `/api/events/:id/results` | Participants plus a name list per slot |
+| `POST` | `/api/events/:id/responses` | `{name, email, slots:[{date, part}]}` — upserts by email |
+| `GET` | `/api/events/:id/results` | Participants plus a `{name, email}` list per slot |
 
 `part` is one of `morning`, `afternoon`, `evening`. Invalid input returns a `4xx` with an
 `{"error": "..."}` message that the pages display as-is.
@@ -160,7 +165,7 @@ ID=$(curl -s -X POST localhost:3000/api/events -H 'Content-Type: application/jso
   -d '{"title":"Summer BBQ","startDate":"2026-08-20","endDate":"2026-08-23"}' | jq -r .id)
 
 curl -s -X POST localhost:3000/api/events/$ID/responses -H 'Content-Type: application/json' \
-  -d '{"name":"Andy","slots":[{"date":"2026-08-21","part":"evening"}]}'
+  -d '{"name":"Andy","email":"andy@example.com","slots":[{"date":"2026-08-21","part":"evening"}]}'
 
 curl -s localhost:3000/api/events/$ID/results
 ```

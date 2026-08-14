@@ -3,7 +3,7 @@
 
 import { test, expect } from '@playwright/test';
 import { PARTS, datesInRange, MAX_RANGE_DAYS } from '../public/dates.js';
-import { WEEK, createEvent, submitResponse } from './helpers.js';
+import { WEEK, createEvent, submitResponse, emailFor, namesOf } from './helpers.js';
 
 test.describe('creating an event', () => {
   test('returns an id', async ({ request }) => {
@@ -131,7 +131,7 @@ test.describe('recording availability', () => {
 
     expect(body.saved).toBe(1);
     const { grid } = await (await request.get(`/api/events/${id}/results`)).json();
-    expect(grid['2026-08-18'].evening).toEqual(['Andy']);
+    expect(namesOf(grid['2026-08-18'].evening)).toEqual(['Andy']);
   });
 
   test('accepts someone who can make nothing', async ({ request }) => {
@@ -141,7 +141,7 @@ test.describe('recording availability', () => {
     const { participants, grid } = await (
       await request.get(`/api/events/${id}/results`)
     ).json();
-    expect(participants).toEqual(['Busy Bob']);
+    expect(namesOf(participants)).toEqual(['Busy Bob']);
     expect(grid['2026-08-18'].evening).toEqual([]);
   });
 
@@ -153,25 +153,61 @@ test.describe('recording availability', () => {
     const { participants, grid } = await (
       await request.get(`/api/events/${id}/results`)
     ).json();
-    expect(participants).toEqual(['Andy']);
+    expect(namesOf(participants)).toEqual(['Andy']);
     expect(grid['2026-08-18'].evening).toEqual([]);
-    expect(grid['2026-08-20'].morning).toEqual(['Andy']);
+    expect(namesOf(grid['2026-08-20'].morning)).toEqual(['Andy']);
   });
 
-  test('matches names case-insensitively, so "andy" updates "Andy"', async ({ request }) => {
+  test('matches emails case-insensitively, so the same person updates', async ({ request }) => {
     const { id } = await createEvent(request);
-    await submitResponse(request, id, 'Andy', [['2026-08-18', 'evening']]);
-    await submitResponse(request, id, 'andy', [['2026-08-19', 'evening']]);
+    await submitResponse(request, id, 'Andy', [['2026-08-18', 'evening']], 'Andy@Example.test');
+    await submitResponse(request, id, 'andy', [['2026-08-19', 'evening']], 'andy@example.test');
 
     const { participants } = await (await request.get(`/api/events/${id}/results`)).json();
-    expect(participants).toEqual(['andy']);
+    expect(namesOf(participants)).toEqual(['andy']);
+  });
+
+  test('two people sharing a name are two people', async ({ request }) => {
+    const { id } = await createEvent(request);
+    // The whole point of the email: a social group can hold three Andys, and
+    // keying on the name made each one overwrite the last.
+    await submitResponse(request, id, 'Andy', [['2026-08-18', 'evening']], 'andy.b@example.test');
+    await submitResponse(request, id, 'Andy', [['2026-08-19', 'evening']], 'andy.c@example.test');
+    await submitResponse(request, id, 'Andy', [['2026-08-20', 'evening']], 'andy.d@example.test');
+
+    const { participants, grid } = await (
+      await request.get(`/api/events/${id}/results`)
+    ).json();
+    expect(namesOf(participants)).toEqual(['Andy', 'Andy', 'Andy']);
+    expect(participants.map((person) => person.email)).toEqual([
+      'andy.b@example.test',
+      'andy.c@example.test',
+      'andy.d@example.test',
+    ]);
+
+    // Each kept their own answer rather than replacing the one before.
+    expect(namesOf(grid['2026-08-18'].evening)).toEqual(['Andy']);
+    expect(namesOf(grid['2026-08-19'].evening)).toEqual(['Andy']);
+    expect(namesOf(grid['2026-08-20'].evening)).toEqual(['Andy']);
+  });
+
+  test('a slot carries the email that tells two same-named people apart', async ({ request }) => {
+    const { id } = await createEvent(request);
+    await submitResponse(request, id, 'Andy', [['2026-08-18', 'evening']], 'andy.b@example.test');
+    await submitResponse(request, id, 'Andy', [['2026-08-18', 'evening']], 'andy.c@example.test');
+
+    const { grid } = await (await request.get(`/api/events/${id}/results`)).json();
+    expect(grid['2026-08-18'].evening).toEqual([
+      { name: 'Andy', email: 'andy.b@example.test' },
+      { name: 'Andy', email: 'andy.c@example.test' },
+    ]);
   });
 
   test.describe('rejects bad input', () => {
     test('a missing name', async ({ request }) => {
       const { id } = await createEvent(request);
       const response = await request.post(`/api/events/${id}/responses`, {
-        data: { name: '  ', slots: [] },
+        data: { name: '  ', email: emailFor('Andy'), slots: [] },
       });
       expect(response.status()).toBe(400);
       expect((await response.json()).error).toMatch(/your name is required/i);
@@ -180,16 +216,36 @@ test.describe('recording availability', () => {
     test('an over-long name', async ({ request }) => {
       const { id } = await createEvent(request);
       const response = await request.post(`/api/events/${id}/responses`, {
-        data: { name: 'x'.repeat(51), slots: [] },
+        data: { name: 'x'.repeat(51), email: emailFor('Andy'), slots: [] },
       });
       expect(response.status()).toBe(400);
       expect((await response.json()).error).toMatch(/50 characters or fewer/i);
     });
 
+    test('a missing email', async ({ request }) => {
+      const { id } = await createEvent(request);
+      const response = await request.post(`/api/events/${id}/responses`, {
+        data: { name: 'Andy', email: '  ', slots: [] },
+      });
+      expect(response.status()).toBe(400);
+      expect((await response.json()).error).toMatch(/your email is required/i);
+    });
+
+    test('something that is not an email address', async ({ request }) => {
+      const { id } = await createEvent(request);
+      for (const email of ['andy', 'andy@', '@example.test', 'andy@example', 'a b@example.test']) {
+        const response = await request.post(`/api/events/${id}/responses`, {
+          data: { name: 'Andy', email, slots: [] },
+        });
+        expect(response.status(), `should have rejected ${email}`).toBe(400);
+        expect((await response.json()).error).toMatch(/does not look like an email/i);
+      }
+    });
+
     test('slots that are not a list', async ({ request }) => {
       const { id } = await createEvent(request);
       const response = await request.post(`/api/events/${id}/responses`, {
-        data: { name: 'Andy', slots: 'evening' },
+        data: { name: 'Andy', email: emailFor('Andy'), slots: 'evening' },
       });
       expect(response.status()).toBe(400);
       expect((await response.json()).error).toMatch(/slots must be a list/i);
@@ -198,7 +254,11 @@ test.describe('recording availability', () => {
     test('a date outside the event range', async ({ request }) => {
       const { id } = await createEvent(request);
       const response = await request.post(`/api/events/${id}/responses`, {
-        data: { name: 'Andy', slots: [{ date: '2026-09-01', part: 'evening' }] },
+        data: {
+          name: 'Andy',
+          email: emailFor('Andy'),
+          slots: [{ date: '2026-09-01', part: 'evening' }],
+        },
       });
       expect(response.status()).toBe(400);
       expect((await response.json()).error).toMatch(/outside this event's dates/i);
@@ -207,7 +267,11 @@ test.describe('recording availability', () => {
     test('a part of the day that does not exist', async ({ request }) => {
       const { id } = await createEvent(request);
       const response = await request.post(`/api/events/${id}/responses`, {
-        data: { name: 'Andy', slots: [{ date: '2026-08-18', part: 'midnight' }] },
+        data: {
+          name: 'Andy',
+          email: emailFor('Andy'),
+          slots: [{ date: '2026-08-18', part: 'midnight' }],
+        },
       });
       expect(response.status()).toBe(400);
       expect((await response.json()).error).toMatch(/not a valid part of the day/i);
@@ -215,7 +279,7 @@ test.describe('recording availability', () => {
 
     test('a response to an event that does not exist', async ({ request }) => {
       const response = await request.post('/api/events/no-such-event/responses', {
-        data: { name: 'Andy', slots: [] },
+        data: { name: 'Andy', email: emailFor('Andy'), slots: [] },
       });
       expect(response.status()).toBe(404);
     });
@@ -226,12 +290,16 @@ test.describe('recording availability', () => {
     await submitResponse(request, id, 'Andy', [['2026-08-18', 'evening']]);
 
     await request.post(`/api/events/${id}/responses`, {
-      data: { name: 'Andy', slots: [{ date: '2026-08-19', part: 'lunchtime' }] },
+      data: {
+        name: 'Andy',
+        email: emailFor('Andy'),
+        slots: [{ date: '2026-08-19', part: 'lunchtime' }],
+      },
     });
 
     // The valid earlier answer must survive the failed one.
     const { grid } = await (await request.get(`/api/events/${id}/results`)).json();
-    expect(grid['2026-08-18'].evening).toEqual(['Andy']);
+    expect(namesOf(grid['2026-08-18'].evening)).toEqual(['Andy']);
   });
 });
 
@@ -259,8 +327,8 @@ test.describe('the results grid', () => {
     const { participants, grid } = await (
       await request.get(`/api/events/${id}/results`)
     ).json();
-    expect(participants).toEqual(['Andy', 'mia', 'zoe']);
-    expect(grid['2026-08-18'].evening).toEqual(['Andy', 'mia', 'zoe']);
+    expect(namesOf(participants)).toEqual(['Andy', 'mia', 'zoe']);
+    expect(namesOf(grid['2026-08-18'].evening)).toEqual(['Andy', 'mia', 'zoe']);
   });
 
   test('is empty for an event nobody has answered', async ({ request }) => {
