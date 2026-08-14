@@ -76,8 +76,8 @@ branch's commits in `main`'s history, so `-d` is satisfied and no more is needed
 and **rebase** do not — both write new commits, so the branch's own commits are reachable
 from nothing and `-d` reports landed work as unmerged. That refusal is the only case where
 `-D` is right, and it is right only because something else has already confirmed the merge:
-`gh pr view` saying `MERGED`. Ask GitHub, because after a squash it is the one that still
-knows. Never reach for `-D` on a refusal you have not explained — that is how work
+`gh pr view` saying `MERGED`. Ask GitHub, because once the merge has rewritten the commits —
+squash or rebase alike — it is the one that still knows. Never reach for `-D` on a refusal you have not explained — that is how work
 disappears without a word.
 
 If deleting fails because the branch is checked out in a worktree, remove the worktree
