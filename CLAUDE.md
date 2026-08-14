@@ -43,6 +43,8 @@ Tests import from `public/dates.js` directly (`tests/helpers.js`), addressing sl
 
 `tests/api.spec.js` runs without a browser page — a failure there points at `app.js` or `db.js`, not the front end.
 
+`tests/mobile.spec.js` is the only file that overrides the viewport (`test.use`), pinning it to 320px. The layout bugs it covers were all invisible at the default desktop size, so a change to `styles.css` that looks fine in the other specs can still fail here.
+
 **The suite runs automatically.** `.claude/settings.json` wires two hooks to `scripts/run-tests-hook.sh`: a `PostToolUse` hook runs it after any edit to a file the tests cover (`public/**`, `app.js`, `start.js`, `db.js`, `tests/**`, `playwright.config.js`), and a `Stop` hook re-runs it at the end of a turn if any edit since the last green run has gone unchecked — tracked by the `.test-pending` marker file. A failure exits 2, which feeds the output back rather than failing quietly.
 
 ## Architecture
@@ -54,7 +56,7 @@ Three-layer, no framework beyond Express:
 - `db.js` — `createStore({ url, authToken })` returns the whole storage API over libSQL. Every method is **async**. The connection and the schema are created lazily and memoised, so importing the module is free and the schema statements run once per process rather than once per request.
 - `public/` — three plain HTML pages (`index` create, `event` pick, `results` view), each with an inline `<script type="module">`, sharing `common.js` and `dates.js`.
 
-### The two invariants worth knowing
+### The invariants worth knowing
 
 **`public/dates.js` is imported by both the browser and `app.js`.** That is deliberate: server and grid can never disagree about which days an event covers, or about `PARTS` / `MAX_RANGE_DAYS` / `validateRange`. Keep it free of DOM and Node APIs. All date maths is on `'YYYY-MM-DD'` strings through `Date.UTC`/`getUTC*` — never `new Date('2026-08-20')` read back in local time, which shifts a day in a UK summer.
 
@@ -69,6 +71,21 @@ share of the group free in that slot, and the fill is `color-mix(… var(--hue) 
 a cell type, set both custom properties or it will render uncoloured. Brightness is never
 the only signal: the count text and the `✓ all` ring carry it too, and `--lit-max` is capped
 per theme so text stays readable on the brightest cell.
+
+**Neither grid may scroll sideways.** A phone in portrait is 320–390 CSS px — 320 on an
+iPhone SE or with Display Zoom on — and both grids used to carry a `min-width` far past
+that, so they scrolled horizontally inside their card and the Evening column was never on
+screen with nothing to say it existed. Two `@media` blocks at the end of `styles.css` fix
+that in CSS alone, each set at the width its own grid stops fitting: **44rem**, where the
+list table reflows to `display: block` and each `tr` becomes a grid of day-header-plus-three-
+slots; and **48rem**, where the month drops its `min-width` and sizes its days in `vw` so
+all seven columns fit. Same DOM and same `renderCell` either way — resist solving a
+narrow-screen problem in JS, because a second render path is how the two would drift.
+Two consequences worth keeping: the `thead` is hidden below 44rem, so `td.slot::before`
+prints the part name on results cells (hue must never be the only signal), and slot buttons
+use `touch-action: pan-y` rather than `none` — `none` cost the page its scroll on a phone
+without buying anything, since a touch pointer never fires `pointerenter` on a neighbour.
+`tests/mobile.spec.js` holds this line at 320px.
 
 ### Storage and deployment
 
