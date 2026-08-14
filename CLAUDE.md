@@ -61,20 +61,24 @@ checks rather than skipping silently, which is the intended way round — a revi
 quietly did not happen is worse than a red tick.
 
 `--delete-branch` handles the remote, and `git fetch --prune` clears the stale
-remote-tracking ref it leaves behind. The local branch is still yours to delete, and this is
-the one place where **`-d` will refuse and `-D` is right**: squashing writes a *new* commit,
-so the branch's own commits are never reachable from `main` and `-d`'s reachability check
-reports work that has in fact landed as unmerged. Ask GitHub instead of git — it is the one
-that did the merge:
+remote-tracking ref it leaves behind. The local branch is still yours to delete, and which
+flag deletes it depends on how the PR was merged:
 
 ```sh
 gh pr view <type>/<short-name> --json state,mergedAt   # expect "MERGED"
-git branch -D <type>/<short-name>
+git branch -d <type>/<short-name>                      # try this first
+git branch -D <type>/<short-name>                      # only after the check above
 ```
 
-That check is not ceremony. `-D` deletes whatever you point it at without comment, so
-something has to stand in for the safety `-d` was giving you, and the merged PR is the only
-thing that still knows.
+Try `-d` first, always: it refuses to delete a branch whose commits are not reachable from
+where you are, which is the check that the work really landed. A **merge commit** keeps the
+branch's commits in `main`'s history, so `-d` is satisfied and no more is needed. **Squash**
+and **rebase** do not — both write new commits, so the branch's own commits are reachable
+from nothing and `-d` reports landed work as unmerged. That refusal is the only case where
+`-D` is right, and it is right only because something else has already confirmed the merge:
+`gh pr view` saying `MERGED`. Ask GitHub, because once the merge has rewritten the commits —
+squash or rebase alike — it is the one that still knows. Never reach for `-D` on a refusal you have not explained — that is how work
+disappears without a word.
 
 If deleting fails because the branch is checked out in a worktree, remove the worktree
 first (`git worktree remove <path>`) — a branch checked out anywhere cannot be deleted.
