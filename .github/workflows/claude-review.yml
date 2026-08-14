@@ -29,7 +29,11 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # A token from `claude setup-token`, so reviews bill to the Claude
+          # subscription rather than to prepaid API credits. Swapping to an API
+          # key means swapping this line for `anthropic_api_key:` — the action
+          # accepts either, and wants exactly one.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Without a token of its own the action exchanges an OIDC token with
           # the Claude GitHub App, and fails outright if the App is not
           # installed on the repository. Handing it the workflow's own token

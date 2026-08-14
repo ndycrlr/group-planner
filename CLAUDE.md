@@ -47,9 +47,13 @@ run: this is the one place in the repository where nothing checks the wording fo
 `--fill` takes the title from the single commit on a one-commit branch, which is usually the
 right answer; pass `--title` when the branch has several.
 
-The review needs an `ANTHROPIC_API_KEY` repository secret (`gh secret set ANTHROPIC_API_KEY`).
-Without it the run fails on the PR's checks rather than skipping silently, which is the
-intended way round — a review that quietly did not happen is worse than a red tick.
+The review needs a `CLAUDE_CODE_OAUTH_TOKEN` repository secret — `claude setup-token`, then
+`gh secret set CLAUDE_CODE_OAUTH_TOKEN`, and set it from a real terminal so the paste is
+masked and the token stays out of the shell history. It bills to the Claude subscription;
+an `ANTHROPIC_API_KEY` works just as well in its place, against prepaid API credits, and
+the workflow names the one line that changes. Without a credential the run fails on the PR's
+checks rather than skipping silently, which is the intended way round — a review that
+quietly did not happen is worse than a red tick.
 
 `--delete-branch` handles the remote, and `git fetch --prune` clears the stale
 remote-tracking ref it leaves behind. The local branch is still yours to delete, and this is
