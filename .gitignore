@@ -7,6 +7,9 @@ node_modules/
 # Vercel
 .vercel/
 
+# Grilling hook
+.grill-last-commit
+
 # Playwright
 .test-pending
 .test-tmp/

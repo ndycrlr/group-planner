@@ -102,6 +102,18 @@ changes take a `!` before the colon or a `BREAKING CHANGE:` footer (uppercase).
 that via the `prepare` script, or run `npm run hooks:install` directly. A rejected commit
 means the subject needs rewriting; do not reach for `--no-verify`.
 
+**Every commit is followed by a grilling session.** A `PostToolUse` hook on
+`Bash`/`PowerShell` in `.claude/settings.json` runs `scripts/grill-hook.sh`, which invokes
+the `grilling` skill (`.agents/skills/grilling/`, installed from `mattpocock/skills` and
+pinned in `skills-lock.json`) against the commit that just landed. The interview is the
+point: it stress-tests the decisions the diff makes before they set.
+
+The hook fires only when the command mentions `git commit` *and* `HEAD` actually moved —
+tracked by the gitignored `.grill-last-commit` marker — so a checkout, a `--dry-run`, or a
+commit the `commit-msg` hook rejected never opens an interview about a commit that does not
+exist. `grill-me` is installed alongside it as the `/grill-me` trigger phrase; it is a
+one-line alias that delegates to `grilling`, so both have to be present.
+
 ## Conventions
 
 - ESM throughout (`"type": "module"`), 2-space indent, single quotes, semicolons.
