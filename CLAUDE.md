@@ -16,6 +16,29 @@ committing to `main` and fixing it afterwards.
 Merge back with `--ff-only` where history is linear, which keeps every commit on `main`
 conventional and avoids a non-conventional merge commit.
 
+**Delete the branch once it is merged — local and remote both.** A branch is a piece of
+work in flight; leaving merged ones lying about turns `git branch -a` into a list that no
+longer tells you what is actually outstanding, which is the one question it exists to
+answer.
+
+```sh
+git checkout main
+git merge --ff-only <type>/<short-name>
+git push                                        # main, with the merged work on it
+git branch -d <type>/<short-name>               # local
+git push origin --delete <type>/<short-name>    # remote
+```
+
+Use `-d`, never `-D`. `-d` refuses to delete a branch whose commits are not reachable from
+where you are, so it is the check that the merge really landed — reach for `-D` and you can
+throw the work away silently. If it refuses, the merge is what needs looking at, not the
+flag. Where the merge happened through a GitHub PR, deleting on the remote may already have
+been done for you; `git fetch --prune` then clears the stale remote-tracking refs, and the
+local branch is still yours to delete.
+
+If deleting fails because the branch is checked out in a worktree, remove the worktree
+first (`git worktree remove <path>`) — a branch checked out anywhere cannot be deleted.
+
 ## Commands
 
 ```sh
