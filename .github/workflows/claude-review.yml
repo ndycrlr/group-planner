@@ -30,6 +30,13 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Without a token of its own the action exchanges an OIDC token with
+          # the Claude GitHub App, and fails outright if the App is not
+          # installed on the repository. Handing it the workflow's own token
+          # skips that exchange, so the review needs one secret rather than a
+          # secret and an App install. The cost is whose name is on the
+          # comments: github-actions[bot] rather than claude[bot].
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           # CLAUDE.md is checked out and worth reading in full, but the
           # invariants it records are the ones a diff breaks quietly, so they
           # are named here rather than left to be noticed.
