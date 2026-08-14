@@ -19,6 +19,11 @@ review something to run on: `.github/workflows/claude-review.yml` fires when a P
 (also on reopen and on a draft marked ready), and a direct push arrives after the only
 moment anything would have looked at it.
 
+The review reads the diff **as it was when the PR opened**. Pushing fixes afterwards does not
+re-run it — `synchronize` is deliberately not in the trigger list, since a review per push is
+mostly a review of the same code again. `gh pr close <n> && gh pr reopen <n>` re-runs it when
+the fixes are worth a second look.
+
 `.githooks/pre-push` refuses a push to `main` so the rule does not depend on remembering it.
 It is a guardrail rather than a lock — this repository is private on a free plan, where
 branch protection and rulesets are unavailable, so the check has to live on this side of the
