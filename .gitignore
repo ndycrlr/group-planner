@@ -9,6 +9,9 @@ node_modules/
 # `vercel link` writes a VERCEL_OIDC_TOKEN here, so this must never be tracked.
 .env*
 
+# Grilling hook
+.grill-last-commit
+
 # Playwright
 .test-pending
 .test-tmp/
