@@ -69,9 +69,13 @@ Both the availability page and the results page can be shown two ways, switched 
 - **List** — a row per day, columns for morning / afternoon / evening. Best for a week.
 - **Month** — a proper calendar grid, one block per month stacked vertically with no
   paging. Days outside the event's range are greyed out. Each day holds three strips
-  (M / A / E); on the results page each strip shows just a count (`3/4`) and reveals the
-  names in a tooltip on hover. Hover needs a mouse, so on a phone use list view to read
-  the names.
+  (M / A / E).
+
+On the results page a slot shows only its count (`3/4`), in both views, and gives up the
+names in a tooltip on hover. The grid is there to be scanned for the slots that work — a
+name under every cell buried that — so who is free is a follow-up question, asked one slot
+at a time. Hovering needs a mouse: on a phone, read the counts and use the "who replied"
+list at the top of the page.
 
 A page opens in whichever view suits the length — list for **7 days or fewer**, month
 beyond that — and once you use the toggle your choice is remembered for next time.

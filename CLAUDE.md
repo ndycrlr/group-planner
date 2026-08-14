@@ -60,7 +60,9 @@ Three-layer, no framework beyond Express:
 
 **`public/dates.js` is imported by both the browser and `app.js`.** That is deliberate: server and grid can never disagree about which days an event covers, or about `PARTS` / `MAX_RANGE_DAYS` / `validateRange`. Keep it free of DOM and Node APIs. All date maths is on `'YYYY-MM-DD'` strings through `Date.UTC`/`getUTC*` — never `new Date('2026-08-20')` read back in local time, which shifts a day in a UK summer.
 
-**List view and month view both drive one `renderCell(cell, date, part, { compact })` callback.** `renderCalendar` in `common.js` picks the layout; each page supplies the callback (`makeCell` in `event.html` / `results.html`). Adding behaviour to a slot means editing that one callback, not two renderers. `compact: true` means the month view's narrow strip — room for an initial and a count only, so names go in a `title` tooltip there.
+**List view and month view both drive one `renderCell(cell, date, part, { compact })` callback.** `renderCalendar` in `common.js` picks the layout; each page supplies the callback (`makeCell` in `event.html` / `results.html`). Adding behaviour to a slot means editing that one callback, not two renderers. `compact: true` means the month view's narrow strip, which now only governs cosmetics — the part initial, and `✓` in place of `✓ all`.
+
+**A results slot shows its count and nothing else.** The names live in a `title` tooltip on every cell, in both views. That is a deliberate reversal: names printed under every count turned the grid into something you read line by line, when the whole point of `--lit` is that you scan it and the bright slots come to you. Adding names back into the cell would undo the light meter. Note the cost — a tooltip needs a mouse, so on a phone the names are currently unreachable and only the counts are.
 
 **The grid's two visual channels are a contract between JS and CSS.** `common.js` stamps
 `data-part` on every list cell, month strip and column heading; the stylesheet maps that

@@ -53,20 +53,34 @@ test('lists everyone who replied', async ({ page, request }) => {
   await expect(page.locator('#people li')).toHaveText(['Andy', 'Priya', 'Tom']);
 });
 
-test('shows the count and the names in each slot', async ({ page, request }) => {
+test('shows the count in each slot, and the names on hover', async ({ page, request }) => {
   const id = await eventWithReplies(request);
   await page.goto(`/results.html?id=${id}`);
 
+  // The cell itself carries only the count — the grid is scanned, not read.
   const busy = resultCell(page, '2026-08-19', 'evening');
   await expect(busy.locator('.count')).toContainText('3/3');
-  await expect(busy.locator('ul.names li')).toHaveText(['Andy', 'Priya', 'Tom']);
+  await expect(busy).toHaveAttribute('title', /Wed 19 Aug evening — Andy, Priya, Tom/);
 
   const quiet = resultCell(page, '2026-08-18', 'evening');
   await expect(quiet.locator('.count')).toContainText('1/3');
-  await expect(quiet.locator('ul.names li')).toHaveText(['Andy']);
+  await expect(quiet).toHaveAttribute('title', /Tue 18 Aug evening — Andy/);
 
   const empty = resultCell(page, '2026-08-17', 'morning');
   await expect(empty.locator('.none')).toHaveText('—');
+  // Nothing to reveal, so no tooltip and no hover affordance.
+  await expect(empty).not.toHaveAttribute('title', /./);
+  await expect(empty).not.toHaveClass(/has-names/);
+});
+
+test('no slot spells its names out in the grid', async ({ page, request }) => {
+  const id = await eventWithReplies(request);
+  await page.goto(`/results.html?id=${id}`);
+
+  // Names in every cell buried the thing the grid is for: spotting the bright
+  // slots. They belong to one slot at a time, on demand.
+  await expect(page.locator('.cell ul.names')).toHaveCount(0);
+  await expect(page.locator('#grid')).not.toContainText('Priya');
 });
 
 test('marks the slot everyone can make', async ({ page, request }) => {
@@ -180,7 +194,7 @@ test.describe('list and month views', () => {
     await expect(outside.locator('.cell')).toHaveCount(0);
   });
 
-  test('month strips put the names in a tooltip', async ({ page, request }) => {
+  test('month strips put the names in a tooltip too', async ({ page, request }) => {
     const id = await eventWithReplies(request);
     await page.goto(`/results.html?id=${id}`);
     await page.getByRole('button', { name: 'Month' }).click();
@@ -199,9 +213,10 @@ test('refresh picks up a reply that arrived since loading', async ({ page, reque
   await page.getByRole('button', { name: 'Refresh' }).click();
 
   await expect(page.locator('#peopleCount')).toHaveText('1 person has replied');
-  await expect(resultCell(page, '2026-08-18', 'evening').locator('ul.names li')).toHaveText([
-    'Latecomer',
-  ]);
+  await expect(resultCell(page, '2026-08-18', 'evening')).toHaveAttribute(
+    'title',
+    /Tue 18 Aug evening — Latecomer/,
+  );
 });
 
 test('links back to the availability page for the same event', async ({ page, request }) => {

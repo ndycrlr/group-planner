@@ -397,7 +397,7 @@ td.slot {
   vertical-align: top;
   width: 28%;
   /* A nominal height lets the cell inside resolve height:100% against the row,
-   * so a day with one long list of names doesn't leave its neighbours stumpy. */
+   * so every slot in a day matches the tallest of them. */
   height: 1px;
 }
 
@@ -442,9 +442,13 @@ button.pick[aria-pressed="true"] {
 
 .cell {
   --lit: 0;
-  min-height: 3.4rem;
+  /* Only a count goes in here, so the box is sized to be a comfortable target
+   * and a readable block of colour rather than to hold a list of names. */
+  min-height: 2.6rem;
   height: 100%;
-  padding: 0.55rem 0.6rem;
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: color-mix(in oklab, var(--hue) calc(var(--lit) * var(--lit-max)), transparent);
@@ -452,28 +456,19 @@ button.pick[aria-pressed="true"] {
 
 .cell.all-available {
   border: 2px solid var(--hue);
-  padding: calc(0.55rem - 1px) calc(0.6rem - 1px);
+  padding: calc(0.45rem - 1px) calc(0.6rem - 1px);
 }
 
 .cell .count {
-  display: block;
-  margin-bottom: 0.3rem;
-  font-size: 0.72rem;
+  font-size: 0.85rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   color: var(--muted);
 }
 
 .cell.all-available .count {
   color: var(--ink);
-}
-
-.cell ul.names {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  font-size: 0.9rem;
 }
 
 .cell .none {
@@ -645,8 +640,9 @@ button.pick.strip {
   font-size: 0.72rem;
 }
 
-/* Names are in the tooltip, so hint that the strip is worth hovering. */
-.cell.strip.has-names {
+/* Names are in the tooltip in both views, so hint that a filled cell is worth
+ * hovering. Only a cell that has names to give gets the cursor. */
+.cell.has-names {
   cursor: help;
 }
 
@@ -806,17 +802,13 @@ button.pick.strip {
   }
 
   .cell {
-    min-height: 3rem;
-    padding: 0.45rem 0.4rem;
+    justify-content: center;
+    min-height: 2.6rem;
+    padding: 0.45rem 0.3rem;
   }
 
   .cell.all-available {
-    padding: calc(0.45rem - 1px) calc(0.4rem - 1px);
-  }
-
-  .cell ul.names {
-    font-size: 0.8rem;
-    line-height: 1.35;
+    padding: calc(0.45rem - 1px) calc(0.3rem - 1px);
   }
 
   /* --- Chrome around the grids ------------------------------------------- */
