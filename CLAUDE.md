@@ -166,3 +166,38 @@ one-line alias that delegates to `grilling`, so both have to be present.
 - Comments explain *why* (timezone traps, the `total > 0` guard on the unanimous highlight, the id-collision retry), not what.
 - British English in user-facing copy ("organiser", "Colour" spellings in prose).
 - `README.md` documents the API table, the view behaviour, and the layout — keep it in step when routes, views, or files change.
+
+### Designs come from Figma
+
+Design work happens in Figma and arrives here as code. The connection is the **remote**
+MCP server, added at user scope so nothing about it lands in the repository:
+
+```sh
+claude mcp add --scope user --transport http figma https://mcp.figma.com/mcp
+```
+
+then `/mcp` → `figma` → **Authenticate**. It is OAuth, not a token — there is no secret to
+put in `.env.local` and nothing to add to `.gitignore`. Note it is the remote server
+specifically: the desktop one needs a Dev or Full seat on a paid plan, the remote one is
+available on every plan including Free.
+
+A design is handed over as a frame link — `figma.com/design/<key>/<name>?node-id=<id>`,
+where the **node id is the part that matters**, since it selects the frame rather than the
+file.
+
+Four of the invariants above are the ones a Figma frame is most likely to contradict,
+because each is a decision the picture cannot show:
+
+- **A slot's design lives in one callback.** `renderCalendar` picks list or month; `makeCell`
+  supplies the cell to both. Two frames — a list design and a month design — still implement
+  as one `renderCell`, never as a second render path.
+- **`--hue` and `--lit` are not optional.** Figma will hand over a flat fill; the cell needs
+  both custom properties or it renders uncoloured.
+- **Neither grid may scroll sideways.** A frame drawn at desktop width says nothing about
+  320px. The 44rem and 48rem `@media` blocks are the answer, in CSS alone.
+- **Brightness is never the only signal.** A design that drops the count text or the `✓ all`
+  ring has removed the fallback, not tidied it.
+
+Where a frame conflicts with one of these, say so and offer the nearest design that does
+not. Implementing it as drawn and letting `tests/mobile.spec.js` fail is the slower route
+to the same conversation.
