@@ -6,6 +6,8 @@ node_modules/
 
 # Vercel
 .vercel/
+# `vercel link` writes a VERCEL_OIDC_TOKEN here, so this must never be tracked.
+.env*
 
 # Playwright
 .test-pending
