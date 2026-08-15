@@ -153,11 +153,38 @@ responses, so treat the link as semi-private.
 many people have answered, and can rename one, move its dates, or delete it outright. The
 gear in the top-right corner of the home page is the way in.
 
-Set `ADMIN_PASSWORD` to switch it on:
+Set `ADMIN_PASSWORD` to switch it on. It is read from the environment of the process
+running the server, so it has to be set in the same terminal, before `npm start` — and a
+server that is already running will not pick up a change until it is restarted.
 
 ```sh
-ADMIN_PASSWORD='something long' npm start   # then open /admin.html
+ADMIN_PASSWORD='something long' npm start          # bash / zsh / Git Bash
 ```
+
+```powershell
+$env:ADMIN_PASSWORD = 'something long'; npm start  # PowerShell
+```
+
+```cmd
+set ADMIN_PASSWORD=something long
+npm start                                          & rem cmd.exe
+```
+
+The bash form is one line because the variable is set *for that command*; PowerShell and
+`cmd` have no such prefix, so the variable is set first and stays set for the rest of that
+terminal session. Then open <http://localhost:3000/admin.html>, or click the gear.
+
+To avoid retyping it, put it in a `.env` file and let Node read it — `.env*` is gitignored,
+so nothing lands in the repository:
+
+```sh
+echo "ADMIN_PASSWORD=something long" > .env
+node --env-file=.env start.js
+```
+
+Write that file as UTF-8 **without a BOM**. Node reads the byte-order mark as part of the
+first key, so a `.env` saved by PowerShell's `Set-Content -Encoding utf8` silently loses
+whichever variable is on line one.
 
 With no `ADMIN_PASSWORD` set, the console is **off** — every `/api/admin/*` route answers
 `503`, and the page says so on arrival rather than offering a password box that could never
