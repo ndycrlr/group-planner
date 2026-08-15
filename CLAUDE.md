@@ -219,37 +219,54 @@ one-line alias that delegates to `grilling`, so both have to be present.
 - British English in user-facing copy ("organiser", "Colour" spellings in prose).
 - `README.md` documents the API table, the view behaviour, and the layout — keep it in step when routes, views, or files change.
 
-### Designs come from Figma
+### Designs come from Penpot
 
-Design work happens in Figma and arrives here as code. The connection is the **remote**
-MCP server, added at user scope so nothing about it lands in the repository:
+Design work happens in Penpot, in the file **Group Booking**, and moves in both directions.
+The connection is the Penpot connector plus the **Penpot MCP Plugin**, which runs inside the
+Penpot tab and hands the connector a live handle on the open file. Nothing about it lands in
+the repository: there is no server to add to `.mcp.json`, no token to keep out of git, and
+the plugin is opened from within Penpot rather than configured here.
 
-```sh
-claude mcp add --scope user --transport http figma https://mcp.figma.com/mcp
-```
+That handle is the fragile part. It belongs to an open browser tab, so closing the tab, or
+letting the session idle long enough, drops it — the next call fails with *"No Penpot
+instance connected for user token"* rather than doing nothing. Reopening the plugin restores
+it. **Long-running `execute_code` calls are what tend to break it**, so build a design in
+several modest calls rather than one that constructs a whole page; each call is a round trip,
+and the partial work already committed to the file survives a drop, while a single giant call
+loses everything it had not yet flushed.
 
-then `/mcp` → `figma` → **Authenticate**. It is OAuth, not a token — there is no secret to
-put in `.env.local` and nothing to add to `.gitignore`. Note it is the remote server
-specifically: the desktop one needs a Dev or Full seat on a paid plan, the remote one is
-available on every plan including Free.
+Reading a design means executing JavaScript against the Penpot plugin API — `execute_code`
+with `penpotUtils.shapeStructure` for the shape tree, `export_shape` to actually look at it.
+There is no frame link to paste: the file is whatever the plugin is currently attached to, so
+identify a design by board name, or ask for it to be selected and read `penpot.selection`.
 
-A design is handed over as a frame link — `figma.com/design/<key>/<name>?node-id=<id>`,
-where the **node id is the part that matters**, since it selects the frame rather than the
-file.
-
-Four of the invariants above are the ones a Figma frame is most likely to contradict,
+Four of the invariants above are the ones a Penpot board is most likely to contradict,
 because each is a decision the picture cannot show:
 
 - **A slot's design lives in one callback.** `renderCalendar` picks list or month; `makeCell`
-  supplies the cell to both. Two frames — a list design and a month design — still implement
+  supplies the cell to both. Two boards — a list design and a month design — still implement
   as one `renderCell`, never as a second render path.
-- **`--hue` and `--lit` are not optional.** Figma will hand over a flat fill; the cell needs
-  both custom properties or it renders uncoloured.
-- **Neither grid may scroll sideways.** A frame drawn at desktop width says nothing about
+- **`--hue` and `--lit` are not optional.** Penpot will hand over a flat fill; the cell needs
+  both custom properties or it renders uncoloured. Going the other way, a slot's fill is the
+  hue at `lit x --lit-max` opacity — that is the whole rule, and it reproduces exactly.
+- **Neither grid may scroll sideways.** A board drawn at desktop width says nothing about
   320px. The 44rem and 48rem `@media` blocks are the answer, in CSS alone.
 - **Brightness is never the only signal.** A design that drops the count text or the `✓ all`
   ring has removed the fallback, not tidied it.
 
-Where a frame conflicts with one of these, say so and offer the nearest design that does
+Where a board conflicts with one of these, say so and offer the nearest design that does
 not. Implementing it as drawn and letting `tests/mobile.spec.js` fail is the slower route
 to the same conversation.
+
+Four things about the Penpot API cost time if you meet them by surprise:
+
+- **`lineHeight` is a ratio, not pixels.** Passing the CSS `52.08px` sets a line box 52 times
+  the font size. Divide by the font size first.
+- **`letterSpacing` is in pixels but may not be negative.** The display face is tracked in
+  (`-1.24px` on `h1`), and Penpot rejects the value outright rather than clamping it, so the
+  tightening cannot be represented — record the intended value on the layer name instead of
+  dropping it silently.
+- **Token set names may not contain spaces around a `/`.** `Daylight/Light` is accepted,
+  `Daylight / Light` is not, and the error names a field index rather than the problem.
+- **`width`/`height` are read-only, and `resize()` sets a text's `growType` to `fixed`.** Set
+  `growType` back to `auto-width`/`auto-height` afterwards, or the text stops sizing itself.
