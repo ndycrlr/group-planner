@@ -1,0 +1,136 @@
+{
+  "themes": {
+    "light": {
+      "tokens": {
+        "morning": "#10879b",
+        "afternoon": "#b8791a",
+        "evening": "#6250c0",
+        "paper": "#eaeef6",
+        "card": "#ffffff",
+        "ink": "#14172b",
+        "muted": "#5c6480",
+        "line": "#d6dce9",
+        "danger": "#a92f22",
+        "lit-max": "76%",
+        "radius": "14px",
+        "radius-sm": "8px",
+        "danger-bg": "#fceceb",
+        "display": "Bricolage Grotesque",
+        "body": "Instrument Sans"
+      }
+    },
+    "dark": {
+      "tokens": {
+        "morning": "#3fc6da",
+        "afternoon": "#ecab3c",
+        "evening": "#9b87ff",
+        "paper": "#0f1220",
+        "card": "#191d2f",
+        "ink": "#e9ecf5",
+        "muted": "#9aa3bd",
+        "line": "#2b3149",
+        "danger": "#ff9d92",
+        "lit-max": "46%",
+        "radius": "14px",
+        "radius-sm": "8px",
+        "danger-bg": "#3a1c19",
+        "display": "Bricolage Grotesque",
+        "body": "Instrument Sans"
+      }
+    }
+  },
+  "type": {
+    "section": {
+      "fontFamily": "Bricolage Grotesque",
+      "fontSize": "18.4px",
+      "fontWeight": "600",
+      "lineHeight": "28.52px",
+      "letterSpacing": "0px"
+    },
+    "body": {
+      "fontFamily": "Instrument Sans",
+      "fontSize": "16px",
+      "fontWeight": "400",
+      "lineHeight": "24.8px",
+      "letterSpacing": "0px"
+    },
+    "hint": {
+      "fontFamily": "Instrument Sans",
+      "fontSize": "14.08px",
+      "fontWeight": "400",
+      "lineHeight": "21.82px",
+      "letterSpacing": "0px"
+    },
+    "h2": {
+      "fontFamily": "Bricolage Grotesque",
+      "fontSize": "21.6px",
+      "fontWeight": "600",
+      "lineHeight": "33.48px",
+      "letterSpacing": "0px"
+    },
+    "stripPart": {
+      "fontFamily": "Instrument Sans",
+      "fontSize": "10.88px",
+      "fontWeight": "700",
+      "lineHeight": "16.86px",
+      "letterSpacing": "0px"
+    },
+    "count": {
+      "fontFamily": "Instrument Sans",
+      "fontSize": "13.6px",
+      "fontWeight": "700",
+      "lineHeight": "21.08px",
+      "letterSpacing": "0.544px"
+    },
+    "h1": {
+      "fontFamily": "Bricolage Grotesque",
+      "fontSize": "49.6px",
+      "fontWeight": "600",
+      "lineHeight": "52.08px",
+      "letterSpacing": "0px"
+    },
+    "subtitle": {
+      "fontFamily": "Instrument Sans",
+      "fontSize": "16.32px",
+      "fontWeight": "400",
+      "lineHeight": "25.3px",
+      "letterSpacing": "0px"
+    },
+    "eyebrow": {
+      "fontFamily": "Instrument Sans",
+      "fontSize": "11.2px",
+      "fontWeight": "600",
+      "lineHeight": "17.36px",
+      "letterSpacing": "1.792px"
+    }
+  },
+  "components": {
+    "Results slot": [
+      "Part=Afternoon, Lit=Empty",
+      "Part=Afternoon, Lit=Fully lit",
+      "Part=Afternoon, Lit=Partly lit",
+      "Part=Evening, Lit=Empty",
+      "Part=Evening, Lit=Fully lit",
+      "Part=Evening, Lit=Partly lit",
+      "Part=Morning, Lit=Empty",
+      "Part=Morning, Lit=Fully lit",
+      "Part=Morning, Lit=Partly lit"
+    ],
+    "Pick slot": [
+      "Part=Afternoon, State=Free",
+      "Part=Afternoon, State=Selected",
+      "Part=Evening, State=Free",
+      "Part=Evening, State=Selected",
+      "Part=Morning, State=Free",
+      "Part=Morning, State=Selected"
+    ]
+  },
+  "penpotOnly": {
+    "Daylight/Light": [
+      "radius.strip = 5"
+    ],
+    "Daylight/Dark": [
+      "radius.strip = 5"
+    ]
+  }
+}

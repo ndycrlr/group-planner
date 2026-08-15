@@ -39,7 +39,9 @@ read_file_path() {
 # The files the suite can actually say anything about.
 covers() {
   case "$1" in
-    *public/*|*/app.js|*/start.js|*/db.js|*tests/*|*playwright.config.js) return 0 ;;
+    # design/contract.js decides what tests/design.spec.js reads, and
+    # design/design.json is what it compares against, so both are covered.
+    *public/*|*/app.js|*/start.js|*/db.js|*tests/*|*playwright.config.js|*design/*) return 0 ;;
     *) return 1 ;;
   esac
 }
