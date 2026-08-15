@@ -384,9 +384,39 @@ passwordInput.addEventListener('keydown', (event) => {
 document.getElementById('refresh').addEventListener('click', load);
 document.getElementById('lock').addEventListener('click', () => lock('Locked.'));
 
-// A reload inside the same tab should not mean typing the password again.
-const remembered = storedPassword();
-if (remembered) unlock(remembered, { fromStorage: true });
+/**
+ * Ask, before anyone types anything, whether this server has an admin password
+ * at all. A request with no header comes back 401 when one is configured and
+ * 503 when none is — so the unconfigured case can be said plainly rather than
+ * left as a password box that could never work. The home page links here, so
+ * that dead end would otherwise be reachable in one click.
+ *
+ * Nothing is given away: a wrong password already tells anyone the difference.
+ */
+async function checkConfigured() {
+  try {
+    await api('/api/admin/session', { method: 'POST', body: '{}' });
+  } catch (error) {
+    if (!/not configured/i.test(error.message)) return true;
+
+    document.querySelector('#lockCard .field').hidden = true;
+    document.querySelector('#lockCard .actions').hidden = true;
+    document.querySelector('#lockCard .hint').textContent =
+      'Set ADMIN_PASSWORD on the server and restart it to switch this console on. ' +
+      'Until then there is no admin access at all, which is the intended state for a ' +
+      'server nobody has configured one for.';
+    setStatus(lockStatus, error.message, true);
+    return false;
+  }
+  return true;
+}
+
+if (await checkConfigured()) {
+  // A reload inside the same tab should not mean typing the password again.
+  const remembered = storedPassword();
+  if (remembered) unlock(remembered, { fromStorage: true });
+  else passwordInput.focus();
+}
 </script>
 
 </body>

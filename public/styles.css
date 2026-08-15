@@ -66,6 +66,14 @@
   box-sizing: border-box;
 }
 
+/* The `hidden` attribute is only a `display: none` in the user-agent sheet, so
+ * any class that sets its own display quietly outranks it — `.field` and
+ * `.actions` both do. Pages here hide things by setting `hidden`, and that has
+ * to mean hidden whatever the element also happens to be. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   padding: 2rem 1.25rem 5rem;
@@ -83,7 +91,61 @@ body {
 /* --- Page head ---------------------------------------------------------- */
 
 .page-head {
+  position: relative;
   margin-bottom: 2rem;
+}
+
+/* The way in to the admin console: a mark in the corner, not a labelled link.
+ * It sits out of the flow so the heading below keeps the full width it was
+ * designed at, and the title is padding rather than the gear's own size — a
+ * 20px icon is a 44px target, which is the smallest a thumb should be asked
+ * to hit. The name is there for a screen reader; the shape is the label for
+ * everyone else. */
+.gear {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.6rem;
+  display: flex;
+  padding: 0.75rem;
+  color: var(--muted);
+  border-radius: 50%;
+  transition: color 140ms ease;
+}
+
+.gear svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 400ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.gear:hover,
+.gear:focus-visible {
+  color: var(--ink);
+}
+
+/* An eighth of a turn: enough to say the thing is a gear and that it moves, not
+ * enough to become an animation anyone has to sit through.
+ *
+ * The svg turns rather than the link. A rotated box is wider than the square it
+ * came from — 20px becomes 28.3 — and turning the link pushed its corner past
+ * the right edge of a 320px screen, giving the page four pixels of sideways
+ * scroll on hover. Inside the link, the growth is absorbed by the padding that
+ * is already there to make the target thumb-sized. */
+.gear:hover svg,
+.gear:focus-visible svg {
+  transform: rotate(45deg);
+}
+
+/* Named for a screen reader, absent for everyone else. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .eyebrow {

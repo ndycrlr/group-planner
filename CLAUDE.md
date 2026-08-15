@@ -239,6 +239,8 @@ one-line alias that delegates to `grilling`, so both have to be present.
 
 - ESM throughout (`"type": "module"`), 2-space indent, single quotes, semicolons.
 - No client-side framework and no dependencies in `public/` — DOM built with the `el()` helper in `common.js`.
+- Pages hide things by setting the `hidden` property, so `styles.css` carries a global `[hidden] { display: none !important }`. The attribute is only a UA-sheet `display: none`, and any class with its own `display` — `.field`, `.actions` — would otherwise outrank it and leave a "hidden" element on screen.
+- Icons are inline SVG, for the same reason there are no dependencies in `public/`: no icon font, no sprite file, no request.
 - Comments explain *why* (timezone traps, the `total > 0` guard on the unanimous highlight, the id-collision retry), not what.
 - British English in user-facing copy ("organiser", "Colour" spellings in prose).
 - `README.md` documents the API table, the view behaviour, and the layout — keep it in step when routes, views, or files change.

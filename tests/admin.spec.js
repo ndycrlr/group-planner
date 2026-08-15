@@ -263,6 +263,17 @@ test.describe('the console page', () => {
     await page.getByRole('button', { name: 'Unlock', exact: true }).click();
   }
 
+  test('the home page has a gear that leads here', async ({ page }) => {
+    await page.goto('/index.html');
+
+    const gear = page.getByRole('link', { name: 'Admin', exact: true });
+    await expect(gear).toBeVisible();
+    await gear.click();
+
+    await expect(page).toHaveURL(/admin\.html$/);
+    await expect(page.locator('#lockCard')).toBeVisible();
+  });
+
   test('shows nothing until the password is right', async ({ page }) => {
     await unlock(page, 'wrong-password');
 
@@ -418,6 +429,14 @@ test.describe('with no password configured', () => {
       expect(response.status, `offered "${password}"`).toBe(503);
       expect((await response.json()).error).toMatch(/not configured/i);
     }
+  });
+
+  test('the page says so rather than offering a box that cannot work', async ({ page }) => {
+    await page.goto(`http://localhost:${PORT}/admin.html`);
+
+    await expect(page.locator('#lockStatus')).toHaveText(/not configured/i);
+    await expect(page.locator('#password')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Unlock', exact: true })).toBeHidden();
   });
 
   test('the rest of the app is unaffected', async () => {

@@ -129,7 +129,8 @@ responses, so treat the link as semi-private.
 ## The admin console
 
 `/admin.html` is the one page that can see past the links. It lists every event with how
-many people have answered, and can rename one, move its dates, or delete it outright.
+many people have answered, and can rename one, move its dates, or delete it outright. The
+gear in the top-right corner of the home page is the way in.
 
 Set `ADMIN_PASSWORD` to switch it on:
 
@@ -138,7 +139,8 @@ ADMIN_PASSWORD='something long' npm start   # then open /admin.html
 ```
 
 With no `ADMIN_PASSWORD` set, the console is **off** — every `/api/admin/*` route answers
-`503`. That way a deployment that forgot to configure one has no admin console at all,
+`503`, and the page says so on arrival rather than offering a password box that could never
+work. That way a deployment that forgot to configure one has no admin console at all,
 rather than an unlocked one. The password is compared in constant time, is sent on each
 request as an `x-admin-password` header, and is kept in `sessionStorage` so it does not
 outlive the tab. It travels in the clear, so serve the app over HTTPS anywhere that
