@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Group Planner — admin</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<main class="page">
+  <header class="page-head">
+    <p class="eyebrow">Group planner</p>
+    <h1>Every event</h1>
+    <p class="subtitle">
+      The one page that can see past the links: list what has been created, fix a title or a
+      date range, and remove what is finished with.
+    </p>
+  </header>
+
+  <section class="card" id="lockCard">
+    <h2>Password, please</h2>
+    <p class="hint">
+      Everywhere else, an event is protected by its link. This page lists them all, so it is
+      the one place that asks.
+    </p>
+    <label class="field">
+      <span>Admin password</span>
+      <input id="password" type="password" autocomplete="current-password">
+    </label>
+    <div class="actions">
+      <button id="unlock" class="primary" type="button">Unlock</button>
+    </div>
+    <p id="lockStatus" class="status" role="status"></p>
+  </section>
+
+  <section class="card" id="eventsCard" hidden>
+    <div class="grid-head">
+      <h2 id="eventsTitle">Events</h2>
+      <div class="actions">
+        <button id="refresh" type="button">Refresh</button>
+        <button id="lock" type="button">Lock</button>
+      </div>
+    </div>
+    <p id="listStatus" class="status" role="status"></p>
+    <ul class="event-list" id="eventList"></ul>
+  </section>
+</main>
+
+<script type="module">
+import { el, api } from './common.js';
+import { formatDay, dayCount, validateRange } from './dates.js';
+
+const PASSWORD_KEY = 'planner:admin';
+
+const lockCard = document.getElementById('lockCard');
+const eventsCard = document.getElementById('eventsCard');
+const eventsTitle = document.getElementById('eventsTitle');
+const passwordInput = document.getElementById('password');
+const unlockButton = document.getElementById('unlock');
+const lockStatus = document.getElementById('lockStatus');
+const listStatus = document.getElementById('listStatus');
+const eventList = document.getElementById('eventList');
+
+let password = null;
+let events = [];
+// Which row is open for editing, and which is one click from being deleted.
+// Both are ids rather than nodes, so a re-render puts the row back as it was.
+let editingId = null;
+let confirmingId = null;
+
+// sessionStorage rather than localStorage: the password should not outlive the
+// tab it was typed into. Private browsing refuses storage altogether, and the
+// console works fine without it — you just type the password again on reload.
+function rememberPassword(value) {
+  password = value;
+  try {
+    if (value === null) sessionStorage.removeItem(PASSWORD_KEY);
+    else sessionStorage.setItem(PASSWORD_KEY, value);
+  } catch {
+    // Not remembering is a small cost; failing to unlock would not be.
+  }
+}
+
+function storedPassword() {
+  try {
+    return sessionStorage.getItem(PASSWORD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setStatus(node, message, isError = false) {
+  node.textContent = message ?? '';
+  node.classList.toggle('error', Boolean(message) && isError);
+}
+
+/** Every admin request carries the password; nothing here is readable without it. */
+function adminApi(path, options = {}) {
+  return api(path, { ...options, headers: { 'x-admin-password': password, ...options.headers } });
+}
+
+/**
+ * A 401 mid-session means the password stopped being right — the server was
+ * restarted with a different one, or someone changed it. Dropping straight back
+ * to the lock screen is the honest response; retrying would just fail again.
+ */
+function handleError(error) {
+  if (/admin password is not right/i.test(error.message)) {
+    lock('Your password is no longer accepted. Sign in again.');
+    return;
+  }
+  setStatus(listStatus, error.message, true);
+}
+
+function lock(message = '') {
+  rememberPassword(null);
+  events = [];
+  editingId = null;
+  confirmingId = null;
+  eventList.replaceChildren();
+  eventsCard.hidden = true;
+  lockCard.hidden = false;
+  setStatus(lockStatus, message, Boolean(message));
+  setStatus(listStatus, '');
+  passwordInput.value = '';
+  passwordInput.focus();
+}
+
+async function unlock(value, { fromStorage = false } = {}) {
+  if (!value) {
+    setStatus(lockStatus, 'Enter the admin password.', true);
+    return;
+  }
+
+  unlockButton.disabled = true;
+  setStatus(lockStatus, fromStorage ? '' : 'Checking…');
+  try {
+    password = value;
+    await adminApi('/api/admin/session', { method: 'POST', body: '{}' });
+    rememberPassword(value);
+    lockCard.hidden = true;
+    eventsCard.hidden = false;
+    setStatus(lockStatus, '');
+    await load();
+  } catch (error) {
+    password = null;
+    // A password recovered from storage that no longer works should not shout
+    // at someone who has not typed anything yet.
+    setStatus(lockStatus, fromStorage ? '' : error.message, !fromStorage);
+    if (fromStorage) rememberPassword(null);
+  } finally {
+    unlockButton.disabled = false;
+  }
+}
+
+async function load() {
+  setStatus(listStatus, 'Loading…');
+  try {
+    const data = await adminApi('/api/admin/events');
+    events = data.events;
+    setStatus(listStatus, '');
+    render();
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+/** '15 Aug 2026' from the stored ISO timestamp. */
+function formatCreated(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'unknown';
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function plural(count, word) {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+function people(count) {
+  return count === 1 ? '1 person' : `${count} people`;
+}
+
+function renderRow(event) {
+  const row = el('li', { className: 'event-row' });
+  row.dataset.id = event.id;
+
+  const days = dayCount(event.startDate, event.endDate);
+  const meta = [
+    `${formatDay(event.startDate)} – ${formatDay(event.endDate)}`,
+    plural(days, 'day'),
+    people(event.responses),
+    plural(event.slots, 'slot'),
+  ].join(' · ');
+
+  row.append(
+    el('div', { className: 'event-main' }, [
+      el('h3', { className: 'event-title', textContent: event.title }),
+      el('p', { className: 'event-meta', textContent: meta }),
+      el('p', { className: 'event-sub', textContent: `${event.id} · created ${formatCreated(event.createdAt)}` }),
+    ]),
+  );
+
+  if (editingId === event.id) {
+    row.append(renderEditor(event));
+    return row;
+  }
+
+  const actions = el('div', { className: 'event-actions' });
+
+  actions.append(
+    el('a', {
+      className: 'link',
+      textContent: 'Results →',
+      href: `./results.html?id=${encodeURIComponent(event.id)}`,
+    }),
+    el('button', {
+      type: 'button',
+      textContent: 'Edit',
+      onclick: () => {
+        editingId = event.id;
+        confirmingId = null;
+        render();
+      },
+    }),
+  );
+
+  if (confirmingId === event.id) {
+    // Two clicks rather than a confirm() dialog: a browser modal blocks the
+    // page, and the answer belongs on the row it is about anyway.
+    actions.append(
+      el('button', {
+        type: 'button',
+        className: 'danger',
+        textContent: 'Yes, delete it',
+        onclick: () => remove(event),
+      }),
+      el('button', {
+        type: 'button',
+        textContent: 'Keep it',
+        onclick: () => {
+          confirmingId = null;
+          render();
+        },
+      }),
+    );
+  } else {
+    actions.append(
+      el('button', {
+        type: 'button',
+        className: 'danger',
+        textContent: 'Delete',
+        onclick: () => {
+          confirmingId = event.id;
+          render();
+        },
+      }),
+    );
+  }
+
+  row.append(actions);
+
+  if (confirmingId === event.id) {
+    const answers = event.responses > 0
+      ? ` ${people(event.responses)} answered — their availability goes with it.`
+      : ' Nobody has answered it.';
+    row.append(
+      el('p', { className: 'event-warning', textContent: `Deleting is permanent.${answers}` }),
+    );
+  }
+
+  return row;
+}
+
+function renderEditor(event) {
+  const titleInput = el('input', { type: 'text', value: event.title, maxLength: 100 });
+  titleInput.setAttribute('aria-label', 'Title');
+  const startInput = el('input', { type: 'date', value: event.startDate });
+  startInput.setAttribute('aria-label', 'First day');
+  const endInput = el('input', { type: 'date', value: event.endDate });
+  endInput.setAttribute('aria-label', 'Last day');
+
+  const status = el('p', { className: 'status' });
+  status.setAttribute('role', 'status');
+  const save = el('button', { type: 'button', className: 'primary', textContent: 'Save' });
+
+  save.addEventListener('click', async () => {
+    const title = titleInput.value.trim();
+    if (!title) {
+      setStatus(status, 'Give the event a name.', true);
+      titleInput.focus();
+      return;
+    }
+    // The same check the server runs, without the round trip — and the same
+    // wording, since the server's message is what the page would show anyway.
+    const rangeError = validateRange(startInput.value, endInput.value);
+    if (rangeError) {
+      setStatus(status, rangeError, true);
+      return;
+    }
+
+    save.disabled = true;
+    setStatus(status, 'Saving…');
+    try {
+      const result = await adminApi(`/api/admin/events/${encodeURIComponent(event.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title, startDate: startInput.value, endDate: endInput.value }),
+      });
+      editingId = null;
+      await load();
+      setStatus(
+        listStatus,
+        result.droppedSlots > 0
+          ? `Saved. ${plural(result.droppedSlots, 'slot')} fell outside the new dates and were removed.`
+          : 'Saved.',
+      );
+    } catch (error) {
+      save.disabled = false;
+      setStatus(status, error.message, true);
+      if (/admin password is not right/i.test(error.message)) handleError(error);
+    }
+  });
+
+  const editor = el('div', { className: 'event-edit' }, [
+    el('label', { className: 'field' }, [el('span', { textContent: 'Title' }), titleInput]),
+    el('div', { className: 'row' }, [
+      el('label', { className: 'field' }, [el('span', { textContent: 'First day' }), startInput]),
+      el('label', { className: 'field' }, [el('span', { textContent: 'Last day' }), endInput]),
+    ]),
+    el('p', {
+      className: 'hint',
+      textContent: 'Shrinking the range drops any availability outside it.',
+    }),
+    el('div', { className: 'actions' }, [
+      save,
+      el('button', {
+        type: 'button',
+        textContent: 'Cancel',
+        onclick: () => {
+          editingId = null;
+          render();
+        },
+      }),
+    ]),
+    status,
+  ]);
+
+  return editor;
+}
+
+async function remove(event) {
+  setStatus(listStatus, 'Deleting…');
+  try {
+    await adminApi(`/api/admin/events/${encodeURIComponent(event.id)}`, { method: 'DELETE' });
+    confirmingId = null;
+    await load();
+    setStatus(listStatus, `Deleted "${event.title}".`);
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+function render() {
+  eventsTitle.textContent = events.length === 1 ? '1 event' : `${events.length} events`;
+
+  if (events.length === 0) {
+    eventList.replaceChildren(
+      el('li', { className: 'event-empty', textContent: 'No events have been created yet.' }),
+    );
+    return;
+  }
+
+  eventList.replaceChildren(...events.map(renderRow));
+}
+
+unlockButton.addEventListener('click', () => unlock(passwordInput.value));
+passwordInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') unlock(passwordInput.value);
+});
+document.getElementById('refresh').addEventListener('click', load);
+document.getElementById('lock').addEventListener('click', () => lock('Locked.'));
+
+// A reload inside the same tab should not mean typing the password again.
+const remembered = storedPassword();
+if (remembered) unlock(remembered, { fromStorage: true });
+</script>
+
+</body>
+</html>

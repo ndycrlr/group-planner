@@ -6,6 +6,7 @@
 // stays off Vercel's list of candidate entry points.
 
 import express from 'express';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -160,6 +161,80 @@ app.get('/api/events/:id/results', async (req, res) => {
   res.json({ event, participants, grid });
 });
 
+// --- The admin console ----------------------------------------------------
+//
+// Everything else in this app is protected by nothing but an unguessable link:
+// no accounts, and an event id you cannot see is an event you cannot reach.
+// These routes break that, because listing every event is exactly what they are
+// for — so they are the one place that needs a credential, and the credential is
+// a single shared password in ADMIN_PASSWORD.
+//
+// With no password set the console is *off*, not open: an unconfigured
+// deployment must not hand out every event to whoever asks first. That is why
+// the check is 503-if-unset rather than skipped-if-unset.
+
+const ADMIN_HEADER = 'x-admin-password';
+
+/**
+ * Compare against the configured password without leaking its length or its
+ * matching prefix through how long the comparison takes. timingSafeEqual needs
+ * two buffers of equal length, which the digests always are.
+ */
+function passwordMatches(supplied) {
+  const digest = (value) => createHash('sha256').update(String(value)).digest();
+  return timingSafeEqual(digest(supplied), digest(process.env.ADMIN_PASSWORD));
+}
+
+function requireAdmin(req, res, next) {
+  if (!process.env.ADMIN_PASSWORD) {
+    throw new HttpError(503, 'Admin access is not configured on this server.');
+  }
+  const supplied = req.get(ADMIN_HEADER);
+  // A missing password and a wrong one get the same answer: which of the two it
+  // was is information the person asking has not earned.
+  if (typeof supplied !== 'string' || !passwordMatches(supplied)) {
+    throw new HttpError(401, 'That admin password is not right.');
+  }
+  next();
+}
+
+// Registered before the routes below, so every one of them is behind it and a
+// new route cannot be added outside the gate by accident.
+app.use('/api/admin', requireAdmin);
+
+// Lets the page check a password before showing anything. It carries no data of
+// its own on purpose — a wrong password must not be told what it missed.
+app.post('/api/admin/session', (req, res) => {
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/events', async (req, res) => {
+  res.json({ events: await store.listEvents() });
+});
+
+app.patch('/api/admin/events/:id', async (req, res) => {
+  const event = await requireEvent(req.params.id);
+  const title = requireString(req.body?.title, 'Title', MAX_TITLE_LENGTH);
+  // Absent dates mean "leave them", so the range can be edited independently of
+  // the title; whatever the result, it goes through the same validateRange the
+  // create form uses, and an event can never end up in a state /api/events
+  // could not have produced.
+  const startDate = req.body?.startDate ?? event.startDate;
+  const endDate = req.body?.endDate ?? event.endDate;
+
+  const rangeError = validateRange(startDate, endDate);
+  if (rangeError) throw new HttpError(400, rangeError);
+
+  const { droppedSlots } = await store.updateEvent(event.id, { title, startDate, endDate });
+  res.json({ event: { id: event.id, title, startDate, endDate }, droppedSlots });
+});
+
+app.delete('/api/admin/events/:id', async (req, res) => {
+  const event = await requireEvent(req.params.id);
+  await store.deleteEvent(event.id);
+  res.json({ ok: true, id: event.id });
+});
+
 // Anything unknown under /api is a JSON 404, not the static file handler's HTML.
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Unknown API route.' });
@@ -172,8 +247,14 @@ app.use((error, req, res, next) => {
   }
   const status = error.status || 500;
   if (status >= 500) console.error(error);
+
+  // A 5xx message is an internal detail unless it is one we wrote on purpose:
+  // the 503 saying the admin console has no password configured exists to be
+  // read by whoever has to go and set one, and swallowing it would leave them
+  // with a dead page and no reason for it.
+  const expose = status < 500 || error instanceof HttpError;
   res.status(status).json({
-    error: status >= 500 ? 'Something went wrong on the server.' : error.message,
+    error: expose ? error.message : 'Something went wrong on the server.',
   });
 });
 

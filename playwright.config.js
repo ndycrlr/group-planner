@@ -9,6 +9,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.TEST_PORT) || 3210;
 const DB_FILE = path.join(here, '.test-tmp', 'playwright.db');
 
+/** The password the test server's admin console runs on. */
+export const ADMIN_PASSWORD = 'test-admin-password';
+
 // Every run starts from an empty database, sidecar files and all. Playwright
 // re-evaluates this config inside each worker, and by then the server is up and
 // holding the file open — deleting it there fails with EPERM on Windows. Only
@@ -38,7 +41,10 @@ export default defineConfig({
   webServer: {
     command: 'node start.js',
     url: `http://localhost:${PORT}/index.html`,
-    env: { PORT: String(PORT), PLANNER_DB: DB_FILE },
+    // The admin console is off unless ADMIN_PASSWORD is set, so the suite has to
+    // set one to test it at all — and tests/admin.spec.js imports this same
+    // constant rather than repeating the string.
+    env: { PORT: String(PORT), PLANNER_DB: DB_FILE, ADMIN_PASSWORD },
     // Never adopt a server someone else started: it would be pointed at the
     // real planner.db rather than the throwaway one above.
     reuseExistingServer: false,
