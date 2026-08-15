@@ -86,9 +86,15 @@ first (`git worktree remove <path>`) — a branch checked out anywhere cannot be
 ## Commands
 
 ```sh
-npm install     # Express is the only dependency
-npm start       # node start.js -> http://localhost:3000
+npm install       # Express is the only dependency
+npm start         # node start.js -> http://localhost:3000
+npm run start:env # the same, with Node reading a gitignored .env first
 ```
+
+`start:env` exists because `ADMIN_PASSWORD` has to reach the *server process*, and the one
+line that sets it differs per shell. `npm start` does not read `.env` on purpose: a server
+whose behaviour depends on a file that is not in the command you typed is the confusion
+this is meant to end, so reading one is something you ask for by name.
 
 ```sh
 npm test                 # the whole Playwright suite (~7s)
