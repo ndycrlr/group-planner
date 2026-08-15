@@ -98,6 +98,12 @@ npm run test:headed      # watch it drive a real browser
 npm run test:report      # open the HTML report after a failure
 ```
 
+```sh
+npm run design:extract   # re-read design/design.json from the running app
+npm run design:push      # print the payload that applies it to Penpot
+npm run design:diff      # compare the last Penpot pull against it
+```
+
 Requires **Node 20+**. There is no build step, no bundler and no linter — the browser loads `public/*.js` directly as ES modules. Playwright is the only dev dependency; `npx playwright install chromium` is needed once on a fresh checkout.
 
 Env vars: `PORT` (default 3000), `PLANNER_DB` (default `./planner.db`, gitignored, created on first run), and `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` which override `PLANNER_DB` with a hosted database. Point `PLANNER_DB` at a scratch file when experimenting so you don't disturb existing data.
@@ -114,7 +120,13 @@ Tests import from `public/dates.js` directly (`tests/helpers.js`), addressing sl
 
 `tests/migration.spec.js` is the only file that talks to `db.js` directly, with no server and no page. It has to: it builds a pre-email database by hand to check the upgrade path, and by the time the test server is up its own database is already current.
 
-**The suite runs automatically.** `.claude/settings.json` wires two hooks to `scripts/run-tests-hook.sh`: a `PostToolUse` hook runs it after any edit to a file the tests cover (`public/**`, `app.js`, `start.js`, `db.js`, `tests/**`, `playwright.config.js`), and a `Stop` hook re-runs it at the end of a turn if any edit since the last green run has gone unchecked — tracked by the `.test-pending` marker file. A failure exits 2, which feeds the output back rather than failing quietly.
+`tests/design.spec.js` asserts nothing about behaviour. It re-reads the design contract from
+the running app and fails when it no longer matches `design/design.json`, which is how a
+change to the design system announces itself as something the Penpot file has not been told.
+A failure there is answered with `npm run design:extract`, not with a fix — see
+`design/README.md`.
+
+**The suite runs automatically.** `.claude/settings.json` wires two hooks to `scripts/run-tests-hook.sh`: a `PostToolUse` hook runs it after any edit to a file the tests cover (`public/**`, `app.js`, `start.js`, `db.js`, `tests/**`, `playwright.config.js`, `design/**`), and a `Stop` hook re-runs it at the end of a turn if any edit since the last green run has gone unchecked — tracked by the `.test-pending` marker file. A failure exits 2, which feeds the output back rather than failing quietly.
 
 ## Architecture
 
@@ -227,6 +239,18 @@ Penpot tab and hands the connector a live handle on the open file. Nothing about
 the repository: there is no server to add to `.mcp.json`, no token to keep out of git, and
 the plugin is opened from within Penpot rather than configured here.
 
+**Both directions go through one contract**, `design/design.json` — the design system as
+values rather than as a picture. `design/README.md` is the full account; the four commands
+are `design:extract` (re-read it from the running app), `design:push` (apply it to Penpot),
+`design:diff` (compare a Penpot pull against it), and `npm test`, which **fails when the app
+drifts from the committed contract**. That failure is how a change made in code announces
+itself as something Penpot has not been told; there is no step to remember.
+
+Because the connector is a handle on a browser tab, none of this is a background sync. The
+pull is something a person or an agent runs — `design/penpot/pull.js` through `execute_code`,
+saved to `design/penpot/pulled.json` — and `design:diff` always exits 0, because a
+disagreement between the design and the code is a decision, not a broken build.
+
 That handle is the fragile part. It belongs to an open browser tab, so closing the tab, or
 letting the session idle long enough, drops it — the next call fails with *"No Penpot
 instance connected for user token"* rather than doing nothing. Reopening the plugin restores
@@ -258,7 +282,7 @@ Where a board conflicts with one of these, say so and offer the nearest design t
 not. Implementing it as drawn and letting `tests/mobile.spec.js` fail is the slower route
 to the same conversation.
 
-Four things about the Penpot API cost time if you meet them by surprise:
+Five things about the Penpot API cost time if you meet them by surprise:
 
 - **`lineHeight` is a ratio, not pixels.** Passing the CSS `52.08px` sets a line box 52 times
   the font size. Divide by the font size first.
@@ -270,3 +294,7 @@ Four things about the Penpot API cost time if you meet them by surprise:
   `Daylight / Light` is not, and the error names a field index rather than the problem.
 - **`width`/`height` are read-only, and `resize()` sets a text's `growType` to `fixed`.** Set
   `growType` back to `auto-width`/`auto-height` afterwards, or the text stops sizing itself.
+- **A `fontFamilies` token is parsed into a list, and a family may not start with a hyphen.**
+  So a CSS stack containing `-apple-system` is rejected whole. Store the leading family only:
+  which typeface to use is a design decision, whereas what to fall back to before it has
+  downloaded is a code one.

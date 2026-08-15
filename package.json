@@ -11,6 +11,9 @@
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report",
+    "design:extract": "node scripts/extract-design.mjs",
+    "design:diff": "node scripts/design-diff.mjs",
+    "design:push": "node scripts/design-push.mjs",
     "hooks:install": "git config core.hooksPath .githooks",
     "prepare": "git config core.hooksPath .githooks || true"
   },
