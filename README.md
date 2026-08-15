@@ -38,6 +38,27 @@ server on port 3210 with a throwaway database, so your real `planner.db` is neve
 touched. One block in `tests/admin.spec.js` starts a second server on 3211 with no
 `ADMIN_PASSWORD`, to check that an unconfigured admin console is closed rather than open.
 
+Two of them check the design system rather than any behaviour: they re-read the
+palette, type scale and breakpoints from the running app and fail if it has moved
+away from `design/design.json`. See [Designs](#designs) below.
+
+## Designs
+
+The design lives in Penpot, in a file called **Group Booking**, and travels in both
+directions through one committed contract — `design/design.json`, the design system
+as values rather than as a picture.
+
+```sh
+npm run design:extract   # re-read the contract from the running app
+npm run design:push      # print the payload that applies it to Penpot
+npm run design:diff      # compare the last Penpot pull against it
+```
+
+Editing the CSS makes `npm test` fail with the values that moved, which is how a
+change in code announces itself as something the design file has not been told.
+`design/README.md` has the whole loop, including what the contract deliberately
+leaves out.
+
 ## Contributing
 
 Commits follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/),
