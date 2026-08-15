@@ -246,7 +246,10 @@ app.use((error, req, res, next) => {
     return res.status(400).json({ error: 'Could not read that request as JSON.' });
   }
   const status = error.status || 500;
-  if (status >= 500) console.error(error);
+  // A 5xx we raised on purpose is a message, not a crash: the 503 for a missing
+  // ADMIN_PASSWORD would otherwise print a full stack on every admin request,
+  // and burying real failures in that noise is how they get missed.
+  if (status >= 500) console.error(error instanceof HttpError ? error.message : error);
 
   // A 5xx message is an internal detail unless it is one we wrote on purpose:
   // the 503 saying the admin console has no password configured exists to be
