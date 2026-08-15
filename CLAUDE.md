@@ -106,7 +106,7 @@ npm run design:diff      # compare the last Penpot pull against it
 
 Requires **Node 20+**. There is no build step, no bundler and no linter — the browser loads `public/*.js` directly as ES modules. Playwright is the only dev dependency; `npx playwright install chromium` is needed once on a fresh checkout.
 
-Env vars: `PORT` (default 3000), `PLANNER_DB` (default `./planner.db`, gitignored, created on first run), and `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` which override `PLANNER_DB` with a hosted database. Point `PLANNER_DB` at a scratch file when experimenting so you don't disturb existing data.
+Env vars: `PORT` (default 3000), `PLANNER_DB` (default `./planner.db`, gitignored, created on first run), `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` which override `PLANNER_DB` with a hosted database, and `ADMIN_PASSWORD`, which switches on the admin console at `/admin.html`. Point `PLANNER_DB` at a scratch file when experimenting so you don't disturb existing data.
 
 ## Tests
 
@@ -117,6 +117,15 @@ Tests import from `public/dates.js` directly (`tests/helpers.js`), addressing sl
 `tests/api.spec.js` runs without a browser page — a failure there points at `app.js` or `db.js`, not the front end.
 
 `tests/mobile.spec.js` is the only file that overrides the viewport (`test.use`), pinning it to 320px. The layout bugs it covers were all invisible at the default desktop size, so a change to `styles.css` that looks fine in the other specs can still fail here.
+
+`tests/admin.spec.js` needs a password to test at all, so `playwright.config.js` exports
+`ADMIN_PASSWORD` and passes it to the test server; the spec imports that same constant.
+Its last block is the exception to everything above: it spawns a **second** server on port
+3211 with `ADMIN_PASSWORD` deleted, to prove the console is closed rather than open when
+nobody configured one. That block is `mode: 'serial'` — the suite is otherwise fully
+parallel, `beforeAll` runs once per worker, and two workers would race for the port. The
+rest of the file never asserts on how many events exist, since the list is global and
+other workers are creating and deleting their own throughout.
 
 `tests/migration.spec.js` is the only file that talks to `db.js` directly, with no server and no page. It has to: it builds a pre-email database by hand to check the upgrade path, and by the time the test server is up its own database is already current.
 
@@ -132,10 +141,10 @@ A failure there is answered with `npm run design:extract`, not with a fix — se
 
 Three-layer, no framework beyond Express:
 
-- `app.js` — Express 5 API + static host for `public/`, exported **without a listener**. All validation lives here (`requireString`, `requireEvent`, `cleanSlots`) and throws `HttpError`, which the single error middleware turns into `{"error": "..."}` at the right status. Pages display that message verbatim, so error strings are user-facing copy.
+- `app.js` — Express 5 API + static host for `public/`, exported **without a listener**. All validation lives here (`requireString`, `requireEvent`, `cleanSlots`) and throws `HttpError`, which the single error middleware turns into `{"error": "..."}` at the right status. Pages display that message verbatim, so error strings are user-facing copy. The middleware replaces a 5xx message with a generic one **unless it is an `HttpError`** — an unexpected failure's message is an internal detail, but a deliberate 503 like "admin access is not configured" exists to be read.
 - `start.js` — imports `app.js` and calls `listen`. The only file that binds a port, and the one `npm start` runs. **Do not rename it to `server.js`**: Vercel treats a root `app.js`, `index.js` or `server.js` as a candidate Express entry point, and having two leaves the choice to chance.
 - `db.js` — `createStore({ url, authToken })` returns the whole storage API over libSQL. Every method is **async**. The connection and the schema are created lazily and memoised, so importing the module is free and the schema statements run once per process rather than once per request.
-- `public/` — three plain HTML pages (`index` create, `event` pick, `results` view), each with an inline `<script type="module">`, sharing `common.js` and `dates.js`.
+- `public/` — four plain HTML pages (`index` create, `event` pick, `results` view, `admin` manage), each with an inline `<script type="module">`, sharing `common.js` and `dates.js`.
 
 ### The invariants worth knowing
 
@@ -144,6 +153,21 @@ Three-layer, no framework beyond Express:
 **List view and month view both drive one `renderCell(cell, date, part, { compact })` callback.** `renderCalendar` in `common.js` picks the layout; each page supplies the callback (`makeCell` in `event.html` / `results.html`). Adding behaviour to a slot means editing that one callback, not two renderers. `compact: true` means the month view's narrow strip, which now only governs cosmetics — the part initial, and `✓` in place of `✓ all`.
 
 **A results slot shows its count and nothing else.** The names live in a `title` tooltip on every cell, in both views. That is a deliberate reversal: names printed under every count turned the grid into something you read line by line, when the whole point of `--lit` is that you scan it and the bright slots come to you. Adding names back into the cell would undo the light meter. Note the cost — a tooltip needs a mouse, so on a phone the names are currently unreachable and only the counts are.
+
+**The admin console is the only thing that may enumerate events, and it is off by
+default.** Everywhere else an unguessable id *is* the access control, so a route that
+lists every id is a different kind of route: `app.use('/api/admin', requireAdmin)` is
+registered before the admin handlers precisely so a new one cannot be added outside the
+gate by accident, and `requireAdmin` throws **503 when `ADMIN_PASSWORD` is unset** rather
+than waving the request through — an unconfigured deployment must have no console, not an
+open one. The comparison is `timingSafeEqual` over SHA-256 digests, and a missing password
+and a wrong one get the same message on purpose. If you add an admin route, add it above
+that middleware's handlers and give it a test in `tests/admin.spec.js`.
+
+**Shrinking an event's range deletes the availability outside it.** `updateEvent` does
+that in the same transaction as the update and returns the count, because `GET /results`
+only builds a grid over the current range: slots outside it are invisible, and leaving
+them means widening the range later resurrects answers nobody re-gave.
 
 **The grid's two visual channels are a contract between JS and CSS.** `common.js` stamps
 `data-part` on every list cell, month strip and column heading; the stylesheet maps that
@@ -227,6 +251,8 @@ one-line alias that delegates to `grilling`, so both have to be present.
 
 - ESM throughout (`"type": "module"`), 2-space indent, single quotes, semicolons.
 - No client-side framework and no dependencies in `public/` — DOM built with the `el()` helper in `common.js`.
+- Pages hide things by setting the `hidden` property, so `styles.css` carries a global `[hidden] { display: none !important }`. The attribute is only a UA-sheet `display: none`, and any class with its own `display` — `.field`, `.actions` — would otherwise outrank it and leave a "hidden" element on screen.
+- Icons are inline SVG, for the same reason there are no dependencies in `public/`: no icon font, no sprite file, no request.
 - Comments explain *why* (timezone traps, the `total > 0` guard on the unanimous highlight, the id-collision retry), not what.
 - British English in user-facing copy ("organiser", "Colour" spellings in prose).
 - `README.md` documents the API table, the view behaviour, and the layout — keep it in step when routes, views, or files change.

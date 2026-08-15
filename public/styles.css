@@ -66,6 +66,14 @@
   box-sizing: border-box;
 }
 
+/* The `hidden` attribute is only a `display: none` in the user-agent sheet, so
+ * any class that sets its own display quietly outranks it — `.field` and
+ * `.actions` both do. Pages here hide things by setting `hidden`, and that has
+ * to mean hidden whatever the element also happens to be. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   padding: 2rem 1.25rem 5rem;
@@ -83,7 +91,61 @@ body {
 /* --- Page head ---------------------------------------------------------- */
 
 .page-head {
+  position: relative;
   margin-bottom: 2rem;
+}
+
+/* The way in to the admin console: a mark in the corner, not a labelled link.
+ * It sits out of the flow so the heading below keeps the full width it was
+ * designed at, and the title is padding rather than the gear's own size — a
+ * 20px icon is a 44px target, which is the smallest a thumb should be asked
+ * to hit. The name is there for a screen reader; the shape is the label for
+ * everyone else. */
+.gear {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.6rem;
+  display: flex;
+  padding: 0.75rem;
+  color: var(--muted);
+  border-radius: 50%;
+  transition: color 140ms ease;
+}
+
+.gear svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 400ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.gear:hover,
+.gear:focus-visible {
+  color: var(--ink);
+}
+
+/* An eighth of a turn: enough to say the thing is a gear and that it moves, not
+ * enough to become an animation anyone has to sit through.
+ *
+ * The svg turns rather than the link. A rotated box is wider than the square it
+ * came from — 20px becomes 28.3 — and turning the link pushed its corner past
+ * the right edge of a 320px screen, giving the page four pixels of sideways
+ * scroll on hover. Inside the link, the growth is absorbed by the padding that
+ * is already there to make the target thumb-sized. */
+.gear:hover svg,
+.gear:focus-visible svg {
+  transform: rotate(45deg);
+}
+
+/* Named for a screen reader, absent for everyone else. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .eyebrow {
@@ -715,6 +777,111 @@ button.pick.strip {
   flex: 1 1 20rem;
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 0.88rem;
+}
+
+/* --- Admin console ------------------------------------------------------- */
+/* A list of rows rather than a table. Every other list of things in this app is
+ * a grid because the days and parts are a grid; events are not, and a table of
+ * them would only bring back the sideways scroll the breakpoints below exist to
+ * remove. Rows wrap instead: the actions drop under the details on a phone. */
+
+.event-list {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 1rem;
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.event-row:first-child {
+  border-top: 0;
+}
+
+.event-main {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.event-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.event-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.88rem;
+}
+
+/* The id is a thing you copy, not a thing you read, so it is set quiet and
+ * monospaced — the same treatment the share link gets. */
+.event-sub {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+button.danger {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 40%, var(--line));
+}
+
+button.danger:hover {
+  background: var(--danger-bg);
+  border-color: currentColor;
+}
+
+/* Deleting takes two clicks, and this line is what fills the gap between them:
+ * the warning has to say what goes with the event, or the second click is being
+ * asked for without saying what it costs. */
+.event-warning {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  background: var(--danger-bg);
+  font-size: 0.88rem;
+}
+
+.event-edit {
+  flex: 1 1 100%;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.event-edit .actions {
+  margin-top: 1.1rem;
+}
+
+.event-edit .status {
+  margin-bottom: 0;
+}
+
+.event-empty {
+  padding: 1.5rem 0;
+  color: var(--muted);
 }
 
 /* --- Narrow screens ------------------------------------------------------ */

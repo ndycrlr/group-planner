@@ -183,6 +183,37 @@ export function createStore({ url, authToken }) {
       throw new Error('Could not allocate an event id.');
     },
 
+    /**
+     * Every event, newest first, with the two numbers that say whether it is
+     * worth keeping: how many people answered, and how many slots they picked
+     * between them. Only the admin console reads this — there is no per-event
+     * ownership in this app, so nothing else is allowed to enumerate events.
+     */
+    async listEvents() {
+      const client = await connect();
+      const { rows } = await client.execute(`
+        SELECT e.id                AS id,
+               e.title             AS title,
+               e.start_date        AS startDate,
+               e.end_date          AS endDate,
+               e.created_at        AS createdAt,
+               (SELECT COUNT(*) FROM responses r WHERE r.event_id = e.id) AS responses,
+               (SELECT COUNT(*) FROM slots s
+                  JOIN responses r ON r.id = s.response_id
+                 WHERE r.event_id = e.id)                                 AS slots
+          FROM events e
+         ORDER BY e.created_at DESC, e.id
+      `);
+      return rows.map((row) => ({
+        ...toPlain(row),
+        // COUNT comes back as a number today, but the client's integer mode is
+        // a setting rather than a promise; Number() costs nothing and means the
+        // JSON never carries a bigint that res.json() cannot serialise.
+        responses: Number(row.responses),
+        slots: Number(row.slots),
+      }));
+    },
+
     async getEvent(id) {
       const client = await connect();
       const { rows } = await client.execute({
@@ -282,6 +313,70 @@ export function createStore({ url, authToken }) {
         participants: participants.rows.map(toPlain),
         slots: slots.rows.map(toPlain),
       };
+    },
+
+    /**
+     * Change an event's title or dates.
+     *
+     * Shrinking the range is the interesting case: slots people already picked
+     * can fall outside the new dates, and leaving them would put availability in
+     * the database that `GET /results` cannot show — its grid only covers days
+     * in range — so the same edit would read differently before and after the
+     * next widening. They go in the same transaction as the update, and the
+     * count comes back so the console can say how many answers it just cost.
+     *
+     * Dates are 'YYYY-MM-DD', where string order is date order, so a plain
+     * comparison is the right one.
+     */
+    async updateEvent(id, { title, startDate, endDate }) {
+      const client = await connect();
+      const transaction = await client.transaction('write');
+      try {
+        await transaction.execute({
+          sql: 'UPDATE events SET title = ?, start_date = ?, end_date = ? WHERE id = ?',
+          args: [title, startDate, endDate, id],
+        });
+        const dropped = await transaction.execute({
+          sql: `DELETE FROM slots
+                 WHERE (date < ? OR date > ?)
+                   AND response_id IN (SELECT id FROM responses WHERE event_id = ?)`,
+          args: [startDate, endDate, id],
+        });
+        await transaction.commit();
+        return { droppedSlots: Number(dropped.rowsAffected) };
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+    },
+
+    /**
+     * Delete an event and everything hanging off it. The slots and responses go
+     * explicitly, in dependency order, for the same reason saveResponse deletes
+     * its own slots: whether foreign keys are enforced is a per-connection
+     * property, so ON DELETE CASCADE is not something to rely on for a delete
+     * that must not leave orphans behind.
+     */
+    async deleteEvent(id) {
+      const client = await connect();
+      const transaction = await client.transaction('write');
+      try {
+        await transaction.execute({
+          sql: `DELETE FROM slots WHERE response_id IN (
+                  SELECT id FROM responses WHERE event_id = ?
+                )`,
+          args: [id],
+        });
+        await transaction.execute({
+          sql: 'DELETE FROM responses WHERE event_id = ?',
+          args: [id],
+        });
+        await transaction.execute({ sql: 'DELETE FROM events WHERE id = ?', args: [id] });
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
     },
 
     async close() {

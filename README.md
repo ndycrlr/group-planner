@@ -24,6 +24,7 @@ talk to a hosted database over the network without any change to the schema.
 | `PLANNER_DB` | `./planner.db` | Where the local SQLite file lives |
 | `TURSO_DATABASE_URL` | — | A hosted libSQL database. Overrides `PLANNER_DB` when set |
 | `TURSO_AUTH_TOKEN` | — | Token for that database |
+| `ADMIN_PASSWORD` | — | Unlocks `/admin.html`. Unset means the admin console is **off**, not open |
 
 ## Tests
 
@@ -32,9 +33,10 @@ npx playwright install chromium   # once, on a fresh checkout
 npm test
 ```
 
-94 Playwright tests cover the API contract and all three pages. They run against
-their own server on port 3210 with a throwaway database, so your real `planner.db`
-is never touched.
+The Playwright suite covers the API contract and every page. It runs against its own
+server on port 3210 with a throwaway database, so your real `planner.db` is never
+touched. One block in `tests/admin.spec.js` starts a second server on 3211 with no
+`ADMIN_PASSWORD`, to check that an unconfigured admin console is closed rather than open.
 
 Two of them check the design system rather than any behaviour: they re-read the
 palette, type scale and breakpoints from the running app and fail if it has moved
@@ -134,13 +136,41 @@ Replies would go missing between instances. So production needs a hosted databas
 3. Deploy — connect the repository at [vercel.com/new](https://vercel.com/new), or run
    `npx vercel deploy`.
 
+Set `ADMIN_PASSWORD` there too if you want the admin console; leaving it unset is the
+deliberate way to have no admin console in production at all.
+
 There is nothing else to configure. Vercel detects Express, turns the app exported from
 `app.js` into a single function, and serves `public/` from its CDN. `start.js` exists only
 to bind a port locally; it is named so that it stays off Vercel's list of candidate entry
 points, which includes `server.js`.
 
-There are no accounts and no passwords: anyone who has an event link can see and change
-that event's responses, so treat the link as semi-private.
+There are no accounts: anyone who has an event link can see and change that event's
+responses, so treat the link as semi-private.
+
+## The admin console
+
+`/admin.html` is the one page that can see past the links. It lists every event with how
+many people have answered, and can rename one, move its dates, or delete it outright. The
+gear in the top-right corner of the home page is the way in.
+
+Set `ADMIN_PASSWORD` to switch it on:
+
+```sh
+ADMIN_PASSWORD='something long' npm start   # then open /admin.html
+```
+
+With no `ADMIN_PASSWORD` set, the console is **off** — every `/api/admin/*` route answers
+`503`, and the page says so on arrival rather than offering a password box that could never
+work. That way a deployment that forgot to configure one has no admin console at all,
+rather than an unlocked one. The password is compared in constant time, is sent on each
+request as an `x-admin-password` header, and is kept in `sessionStorage` so it does not
+outlive the tab. It travels in the clear, so serve the app over HTTPS anywhere that
+matters, and avoid leading or trailing spaces in the value — HTTP trims them in transit.
+
+Deleting an event takes two clicks and says what goes with it: the responses and their
+slots are removed in the same transaction. Shrinking an event's date range drops any
+availability that now falls outside it, and the console reports how many slots that cost —
+the alternative is answers sitting in the database that no page can show.
 
 ## Layout
 
@@ -152,6 +182,7 @@ public/
   index.html       create an event
   event.html       pick your availability
   results.html     who is free when
+  admin.html       every event, behind ADMIN_PASSWORD
   dates.js         date helpers shared by the browser AND the server
   common.js        API wrapper + the list and month renderers, view toggle
   styles.css       styling, light and dark, and the narrow-screen layouts
@@ -175,9 +206,17 @@ desktop can never drift apart in what they show.
 | `GET` | `/api/events/:id` | Event title and date range |
 | `POST` | `/api/events/:id/responses` | `{name, email, slots:[{date, part}]}` — upserts by email |
 | `GET` | `/api/events/:id/results` | Participants plus a `{name, email}` list per slot |
+| `POST` | `/api/admin/session` | Checks the admin password and nothing else |
+| `GET` | `/api/admin/events` | Every event, with response and slot counts |
+| `PATCH` | `/api/admin/events/:id` | `{title, startDate?, endDate?}` → the event and `droppedSlots` |
+| `DELETE` | `/api/admin/events/:id` | Removes the event, its responses and their slots |
 
 `part` is one of `morning`, `afternoon`, `evening`. Invalid input returns a `4xx` with an
 `{"error": "..."}` message that the pages display as-is.
+
+The four `/api/admin/*` routes need an `x-admin-password` header matching `ADMIN_PASSWORD`
+— `401` without it, `503` if the server has no password configured. The other routes need
+nothing but the event id.
 
 ### Example
 
