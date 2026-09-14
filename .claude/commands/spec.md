@@ -34,12 +34,16 @@ Before making any content, switch to a new Git branch using the `branch_name` de
 
 Create a markdown document that Plan mode can use directly and save it in the _specs folder using the `feature_slug`. Use the exact structure as defined in the spec template file here: @_specs/template.md. Do not add technical implementation details such as code examples.
 
-## Step 5. Final output to the user
+## Step 5. Create Git commit
+
+Using a Conventional Commit syntax, create a commit for the code changes and submit that commit.
+
+## Step 6. Final output to the user
 
 After the file is saved, respond to the user with a short summary in the exact format:
 
 Branch: <branch_name>  
-Spec file: specs/<feature_slug>.md  
+Spec file: _specs/<feature_slug>.md  
 Title: <feature_title>
 
 Do not repeat the full spec in the chat output unless the user explicitly asks to see it. The main goal is to the save the spec file and report where it lives and what branch name to use.
