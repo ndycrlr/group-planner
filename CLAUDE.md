@@ -262,6 +262,7 @@ one-line alias that delegates to `grilling`, so both have to be present.
 - Comments explain *why* (timezone traps, the `total > 0` guard on the unanimous highlight, the id-collision retry), not what.
 - British English in user-facing copy ("organiser", "Colour" spellings in prose).
 - `README.md` documents the API table, the view behaviour, and the layout — keep it in step when routes, views, or files change.
+- Every page carries the same `<footer class="site-footer">` markup, fixed to the bottom of the viewport, so it survives a page's script failing. `body`'s bottom padding is what keeps content clear of it (`--footer-space` in `styles.css`) — a new page needs both the footer and that padding, or its last element ends up hidden underneath.
 
 ### Designs come from Penpot
 
