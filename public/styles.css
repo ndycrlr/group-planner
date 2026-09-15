@@ -33,6 +33,11 @@
 
   --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Room the fixed footer needs below the page content, including the iPhone
+   * home-indicator strip. Not part of the design contract (design/contract.js)
+   * — it is layout plumbing, not a design token. */
+  --footer-space: calc(3rem + env(safe-area-inset-bottom));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -76,7 +81,7 @@
 
 body {
   margin: 0;
-  padding: 2rem 1.25rem 5rem;
+  padding: 2rem 1.25rem calc(5rem + var(--footer-space));
   background: var(--paper);
   color: var(--ink);
   font: 16px/1.55 var(--body);
@@ -884,6 +889,26 @@ button.danger:hover {
   color: var(--muted);
 }
 
+/* --- Site footer --------------------------------------------------------- */
+/* Fixed rather than sticky: the link has to stay reachable on every page
+ * regardless of how much content is above it, not just once the user has
+ * scrolled a normal document flow to its end. `body`'s bottom padding (above,
+ * and in the 30rem query below) is what keeps the last card or button from
+ * ending up underneath it — this rule only has to worry about its own box. */
+.site-footer {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 10;
+  padding: 0.55rem max(1rem, env(safe-area-inset-right))
+    calc(0.55rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
 /* --- Narrow screens ------------------------------------------------------ */
 /* A phone in portrait is 320–390 CSS px across — 320 on an iPhone SE, or on any
  * iPhone with Display Zoom turned on. The list table's 34rem minimum and the
@@ -1090,7 +1115,7 @@ button.danger:hover {
 
 @media (max-width: 30rem) {
   body {
-    padding: 1.25rem 0.9rem 4rem;
+    padding: 1.25rem 0.9rem calc(4rem + var(--footer-space));
   }
 
   .card {

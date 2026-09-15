@@ -238,6 +238,12 @@ callback, so the availability logic on each page is written once and rendered tw
 The narrow-screen layouts are CSS alone — same markup, same callback — so a phone and a
 desktop can never drift apart in what they show.
 
+Every page ends with a `<footer class="site-footer">` linking to Knowledge Work, fixed to
+the bottom of the viewport at every width. It's static HTML repeated on each of the four
+pages rather than something the scripts render, so it still shows even if a page's script
+fails. `body`'s bottom padding is sized to clear it — a page that adds new content at the
+end should check nothing ends up hidden underneath.
+
 ## API
 
 | Method | Route | Purpose |
